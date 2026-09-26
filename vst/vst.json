@@ -1,6 +1,6 @@
 {
   "name": "Monomodule One", "vendor": "shnolk", "uid": "MnmO", "version": 1000,
   "so": "monomodule_one.so",
-  "params": "params.json",
+  "params": "params.json", "layout": "layout.conf",
   "build": {"root": "..", "sources": [], "cflags": [], "libs": []}
 }
