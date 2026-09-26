@@ -92,6 +92,13 @@ checkpoint, not just at the end.
   ARM32_JIT.md, "Whole-program static recompiler". Build steps are in
   `libs/dsp56300/tools/arm32jit_prototype/recomp/`. The generated `.inl` holds firmware words: never commit it.
 
+- **2026-09-27 (overnight Stage 3): real-time feasible.** With the static recompiler plus Stage 3 optimisations
+  (dead-flag elimination, whole-loop functions, and hot-helper fixes found with an on-device source-line
+  profiler), mnm-bench is at 59% average (interpreter ~225%). Paced at real-time priority on the Force, with its
+  normal background load (JV-880 emulator, MockbaMod capture script), every machine's p99 is under 100%. The
+  heaviest, DPRO DDRW, is at mean 66% / p99 93%. Bit-exact with the x86 reference on all 22 machines. The VST
+  wrapper should run the DSP on its own SCHED_FIFO thread. Details and the step table are in ARM32_JIT.md.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
