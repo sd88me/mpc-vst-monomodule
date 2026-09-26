@@ -34,11 +34,15 @@ checkpoint, not just at the end.
 - **Stage 1 in progress** — make the interpreter bit-exact against the JIT (`mnm-golden` hash match
   on every machine). dsp56300#8 (out-of-range-read divergence) is fixed and pushed. Still open:
   10/22 machines still mismatch (FM+ STAT/PAR/DYN, GND SIN, SWAVE SAW/PULS, DPRO WAVE, REVERB,
-  RINGMOD, PHASER) — narrowed to a small, early (sample 24 of 264448) numeric divergence on GND SIN,
-  likely a rounding/precision bug in oscillator or sine-table-build arithmetic rather than the
-  gross saturation bug the DspEngine.cpp comment describes. Next step is a per-instruction trace
-  diff (interpreter vs JIT), not more code reading — see `libs/dsp56300/docs/ARM32_JIT.md`'s Stage 1
-  section for the full detail.
+  RINGMOD, PHASER). Narrowed to an exact, cheap, deterministic repro: dump the 8192-entry sine
+  table the kernel builds at init (Y:$14A000, no audio pipeline needed) and diff interpreter vs.
+  JIT — they agree exactly through index 0x1800 (both -1.0 exactly), then every entry from 0x1801
+  onward has the interpreter's value sign-flipped vs. the JIT's. Two plausible causes were tested
+  and ruled out (one real-but-inert saturation-logic bug fixed anyway, one accumulator-add bug
+  proven to be a no-op after masking); the actual cause is still open. See
+  `libs/dsp56300/docs/ARM32_JIT.md`'s Stage 1 section for the full detail, what's ruled out, and the
+  recommended next step (a from-scratch minimal reproducer feeding the loop's exact instruction
+  sequence to a bare DSP instance, rather than debugging inside the full kernel).
 - Xenia (Microwave XT) parked: same dsp56300 core, much heavier DSP load (~100MHz-class vs.
   Monomodule's ~21M instr/s) — check with Gearmulator's `virusTestConsole`-style instruction-rate
   measurement before assuming this JIT makes Xenia viable too.
