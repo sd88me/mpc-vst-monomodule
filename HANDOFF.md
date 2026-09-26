@@ -40,14 +40,22 @@ checkpoint, not just at the end.
   counts (which doesn't survive JIT/interpreter hardware-loop batching — see
   `libs/dsp56300/docs/ARM32_JIT.md` for what didn't work, for next time). Also fixed along the way:
   dsp56300#8 (out-of-range-read divergence).
-- **Stage 2 in progress (2026-09-26)** — the calling shape (hand-written Thumb-2 blocks calling
-  into existing interpreter opcode handlers) and its ABI assumptions are proven end-to-end, on x86
-  and on a real armhf binary under qemu-arm. The actual block compiler and the on-device timing
-  measurement (the whole point of this stage) haven't been started — paused here because the user
-  was near a usage limit, not because of any blocker. Next step is written out precisely in
-  `libs/dsp56300/docs/ARM32_JIT.md`'s Stage 2 section: compile Stage 1's already-understood
-  sine-table loop body into one block and time it against the interpreter on the Force
-  (`root@192.168.1.44`, confirmed reachable). Bail-out gate unchanged: >=1.3x speedup or stop.
+- **Stage 2 blocked (2026-09-26)** — not by anything in Stage 2 itself. The calling shape
+  (hand-written Thumb-2 blocks calling into existing interpreter opcode handlers), its ABI, and the
+  actual block compiler (walks P memory, resolves each instruction the way `op_ResolveCache` does,
+  emits the call sequence) are all built and correct — verified decoding Stage 1's sine-table loop
+  body correctly on x86. But running *any* armhf binary built against this fork — including plain
+  `mnm-golden`, Stage 1's own already-passing tool, completely unmodified — segfaults on the real
+  Force with a wild branch (PC == fault address) inside `MemoryBuffer`'s constructor (upstream
+  code, untouched by any patch here). Reproduces natively over SSH, not a qemu-user artifact, and
+  not an optimizer bug (`-O0` still crashes). This contradicts this project's own recorded Force
+  interpreter benchmarks (150-285% load numbers in `[[monomodule-force-feasibility]]`), which imply
+  this exact memory setup worked on this hardware before — so the leading theory is a toolchain
+  regression (this session's cross-compiler/flags don't match whatever built those numbers), not a
+  newly-discovered 32-bit bug, but that's unconfirmed. Full detail, the crash's exact signature, and
+  next steps (find the original toolchain, or get a real backtrace — no gdb available on-device or
+  in this session's containers) are in `libs/dsp56300/docs/ARM32_JIT.md`'s Stage 2 section. Bail-out
+  gate unchanged, not yet reachable: >=1.3x speedup or stop, once this unblocks.
 - Xenia (Microwave XT) parked: same dsp56300 core, much heavier DSP load (~100MHz-class vs.
   Monomodule's ~21M instr/s) — check with Gearmulator's `virusTestConsole`-style instruction-rate
   measurement before assuming this JIT makes Xenia viable too.
