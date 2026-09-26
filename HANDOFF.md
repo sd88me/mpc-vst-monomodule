@@ -99,6 +99,13 @@ checkpoint, not just at the end.
   heaviest, DPRO DDRW, is at mean 66% / p99 93%. Bit-exact with the x86 reference on all 22 machines. The VST
   wrapper should run the DSP on its own SCHED_FIFO thread. Details and the step table are in ARM32_JIT.md.
 
+- **2026-09-27: Stage 3 DONE.** Final: mnm-bench 57.6-58.4% average (normal priority). Paced at real-time
+  priority, the heaviest machine (DPRO DDRW) is at mean 67% / p99 93%, and every machine's p99 is under 100%.
+  Bit-exact with x86 on all 22 machines. **Next is the port itself** (VST wrapper, skin, vst.json). Before
+  shipping: widen discovery coverage and decide the distribution model. The generated code contains firmware
+  words, so users must build it from their own OS `.syx`. See ARM32_JIT.md "Stage 3 conclusion" and
+  `libs/dsp56300/tools/arm32jit_prototype/recomp/README.md` (pipeline).
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
