@@ -106,6 +106,14 @@ checkpoint, not just at the end.
   words, so users must build it from their own OS `.syx`. See ARM32_JIT.md "Stage 3 conclusion" and
   `libs/dsp56300/tools/arm32jit_prototype/recomp/README.md` (pipeline).
 
+- **2026-09-27: coexistence measured.** One Monomodule instance = one engine = one core. On the Force, N engines
+  work on N separate cores (heaviest machine ~66% of its core, typical ~46%, light ~38%), but **the DSP thread
+  must be SCHED_FIFO above MPC's AudioWorkers (RR 20)**: below them even 25% other load causes misses. Running
+  above them, typical machines coexist with ~50% other work on the same core; the heavy ones (DPRO DDRW/DENS,
+  RINGMOD, REVERB, SID) need a core mostly to themselves (other work fine to ~20%). JV-880 (`jv880-emu`, FIFO 45,
+  cores 0-2) is already on the device at ~20% of a core. Core 3 has no JV-880. Open: how MPC calls plugins,
+  and real project loads. Tables and pitfalls in ARM32_JIT.md "Coexistence with the rest of MPC".
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
