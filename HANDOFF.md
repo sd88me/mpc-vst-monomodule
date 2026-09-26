@@ -31,9 +31,14 @@ checkpoint, not just at the end.
   support 32-bit) or writing a new emulator (would lose the interpreter/opcode tables/peripherals
   that already work).
 - Stage 0 (instruction-mix histogram) done and passed — see `libs/dsp56300/docs/ARM32_JIT.md`.
-- **Next: Stage 1** — make the interpreter bit-exact against the JIT (`mnm-golden` hash match on
-  every machine). Two known bugs to fix: accumulator saturation, and dsp56300#8's out-of-range-read
-  divergence. Not yet started.
+- **Stage 1 in progress** — make the interpreter bit-exact against the JIT (`mnm-golden` hash match
+  on every machine). dsp56300#8 (out-of-range-read divergence) is fixed and pushed. Still open:
+  10/22 machines still mismatch (FM+ STAT/PAR/DYN, GND SIN, SWAVE SAW/PULS, DPRO WAVE, REVERB,
+  RINGMOD, PHASER) — narrowed to a small, early (sample 24 of 264448) numeric divergence on GND SIN,
+  likely a rounding/precision bug in oscillator or sine-table-build arithmetic rather than the
+  gross saturation bug the DspEngine.cpp comment describes. Next step is a per-instruction trace
+  diff (interpreter vs JIT), not more code reading — see `libs/dsp56300/docs/ARM32_JIT.md`'s Stage 1
+  section for the full detail.
 - Xenia (Microwave XT) parked: same dsp56300 core, much heavier DSP load (~100MHz-class vs.
   Monomodule's ~21M instr/s) — check with Gearmulator's `virusTestConsole`-style instruction-rate
   measurement before assuming this JIT makes Xenia viable too.
