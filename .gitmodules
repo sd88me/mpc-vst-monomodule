@@ -1,0 +1,6 @@
+[submodule "libs/dsp56300"]
+	path = libs/dsp56300
+	url = https://github.com/sd88me/dsp56300.git
+[submodule "libs/monomodule"]
+	path = libs/monomodule
+	url = https://github.com/shnolk/monomodule.git
