@@ -65,6 +65,14 @@ checkpoint, not just at the end.
   `libs/dsp56300/tools/arm32jit_prototype/toolchain-diff/README.md`. Session-local build dirs and
   Docker images are gone. Rebuilding needs Docker Desktop running with WSL integration enabled.
 
+- **2026-09-26 final: Stage 2 gate FAILED; the arm32 JIT effort is stopped.** The compiled block ran
+  at only 1.12-1.17x the interpreter's speed on the Force (the gate is 1.3x). The "crash" was a
+  missing `MNM_DSP_INTERP=1`: without it `DspEngine` takes the JIT path, and on armv7 that goes
+  through a NULL table. Also found: the armhf interpreter differs from x86 on the 7 effect machines
+  (deterministic, reproduces under qemu). Details are in `libs/dsp56300/docs/ARM32_JIT.md`, "Stage 2
+  result". With the JIT ruled out, this port needs the interpreter itself to get faster (150-285% of
+  one core today), or it gets shelved.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
