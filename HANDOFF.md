@@ -78,6 +78,11 @@ checkpoint, not just at the end.
   optimizing the interpreter is about 1.45x against the ~2.5-4x needed. See ARM32_JIT.md,
   "Interpreter profile on the Force".
 
+- **2026-09-26: UN-SHELVED, static recompilation is promising.** The DSP loop, translated ahead of time
+  to C++ that calls the interpreter's handlers with constant opcodes, runs 1.84-2.06x faster on the
+  Force, with registers matching exactly. That isn't enough yet (~120% of a core). Next gate: inline
+  memory access and reach >= 3x on the same loop. See ARM32_JIT.md, "Static recompilation gate test".
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
