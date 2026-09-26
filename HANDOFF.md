@@ -83,6 +83,10 @@ checkpoint, not just at the end.
   Force, with registers matching exactly. That isn't enough yet (~120% of a core). Next gate: inline
   memory access and reach >= 3x on the same loop. See ARM32_JIT.md, "Static recompilation gate test".
 
+- **2026-09-26: recompilation gate 2 passed, 3.73-3.83x** on the Force (pinned), with `flatten` on the
+  generated block. That projects to ~64% of one core. Next: whole-program recompiler, gated on
+  `mnm-golden` matching on all 22 machines and `mnm-bench` <= 100%. See ARM32_JIT.md.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
