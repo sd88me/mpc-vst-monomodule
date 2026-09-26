@@ -114,6 +114,13 @@ checkpoint, not just at the end.
   cores 0-2) is already on the device at ~20% of a core. Core 3 has no JV-880. Open: how MPC calls plugins,
   and real project loads. Tables and pitfalls in ARM32_JIT.md "Coexistence with the rest of MPC".
 
+- **Decision (2026-09-27): further speed-ups are parked for the next major revision.** That means block chaining,
+  SR mode-bit specialisation, idle-voice skipping and the register-allocating code generator; the ideas and their
+  estimates are in ARM32_JIT.md ("Stage 3 conclusion"). **Next task: the VST wrapper, skin and vst.json**, following
+  the other mpc-vst ports and the `mpc-vst-plugin` skill. Design requirements from the measurements: one engine per
+  instance on its own core, DSP thread SCHED_FIFO above priority 20 with a bailout when behind, ~62 MB per instance,
+  and a build step that generates the recompiled code from the user's own OS `.syx`.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
