@@ -121,6 +121,19 @@ checkpoint, not just at the end.
   instance on its own core, DSP thread SCHED_FIFO above priority 20 with a bailout when behind, ~62 MB per instance,
   and a build step that generates the recompiled code from the user's own OS `.syx`.
 
+- **2026-09-27: VST wrapper spike built (`vst/`).** `mnm_engine.cpp` = in-process `mpc_engine()` (one voice; the
+  DSP on its own SCHED_FIFO 30 thread, `MNM_FIFO`/`MNM_CPU` env overrides; 2-block ring; silence on underrun; OS
+  loaded on that thread so create() returns at once; forces `MNM_DSP_INTERP=1`). 59 params (machine, level, SYN/AMP/
+  FILT/EFX 8 each, LFO1-3 8 each; raw 0..127). `build_so.sh` cross-builds the .so (needs the scratchpad glue tree,
+  the dsp56300 arm32 tree and a dir with the user's generated `dsp56k_recomp.inl`). `smoke.cpp` drives it paced on
+  the Force: SWAVE SAW 46%, DPRO DDRW 69% of the DSP thread's core, 0 underruns. Auto-layout skin only; the exact
+  upstream (LCD-look) skin is next, and it must be generated at install time from the user's OS file (fonts/dials/
+  icons come from it, see upstream RomArt.h). **User decisions: One only (no Six), FX later as a separate effect
+  plugin; skin comes after the spike runs on the device.** Staged on the Force (`/sdcard/vst/monomodule_one.so`,
+  `/sdcard/vst/monomodule/<OS>.syx`, skin folder in /sdcard/Synths) but NOT registered: needs the user's OK to
+  restart MPC and edit MPC.settings. Known mpc-vst gotcha: an auto-layout with a popup fails unless the layout is
+  copied to a real layout.conf first (done).
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
