@@ -60,6 +60,11 @@ checkpoint, not just at the end.
   Monomodule's ~21M instr/s) — check with Gearmulator's `virusTestConsole`-style instruction-rate
   measurement before assuming this JIT makes Xenia viable too.
 
+- **2026-09-26 later:** step 1 of the resume found the old/new CMake caches point at different
+  dsp56300 source trees (not just different build types). Bisect from `a750f285`; see
+  `libs/dsp56300/tools/arm32jit_prototype/toolchain-diff/README.md`. Session-local build dirs and
+  Docker images are gone. Rebuilding needs Docker Desktop running with WSL integration enabled.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
