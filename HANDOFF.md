@@ -87,6 +87,11 @@ checkpoint, not just at the end.
   generated block. That projects to ~64% of one core. Next: whole-program recompiler, gated on
   `mnm-golden` matching on all 22 machines and `mnm-bench` <= 100%. See ARM32_JIT.md.
 
+- **2026-09-26: whole-program static recompiler works.** It hash-matches the x86 reference on all 22
+  machines on the Force, and load is 225% -> 113% of one core. The gate is <= 100%. See
+  ARM32_JIT.md, "Whole-program static recompiler". Build steps are in
+  `libs/dsp56300/tools/arm32jit_prototype/recomp/`. The generated `.inl` holds firmware words: never commit it.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
