@@ -31,18 +31,16 @@ checkpoint, not just at the end.
   support 32-bit) or writing a new emulator (would lose the interpreter/opcode tables/peripherals
   that already work).
 - Stage 0 (instruction-mix histogram) done and passed — see `libs/dsp56300/docs/ARM32_JIT.md`.
-- **Stage 1 in progress** — make the interpreter bit-exact against the JIT (`mnm-golden` hash match
-  on every machine). dsp56300#8 (out-of-range-read divergence) is fixed and pushed. Still open:
-  10/22 machines still mismatch (FM+ STAT/PAR/DYN, GND SIN, SWAVE SAW/PULS, DPRO WAVE, REVERB,
-  RINGMOD, PHASER). Narrowed to an exact, cheap, deterministic repro: dump the 8192-entry sine
-  table the kernel builds at init (Y:$14A000, no audio pipeline needed) and diff interpreter vs.
-  JIT — they agree exactly through index 0x1800 (both -1.0 exactly), then every entry from 0x1801
-  onward has the interpreter's value sign-flipped vs. the JIT's. Two plausible causes were tested
-  and ruled out (one real-but-inert saturation-logic bug fixed anyway, one accumulator-add bug
-  proven to be a no-op after masking); the actual cause is still open. See
-  `libs/dsp56300/docs/ARM32_JIT.md`'s Stage 1 section for the full detail, what's ruled out, and the
-  recommended next step (a from-scratch minimal reproducer feeding the loop's exact instruction
-  sequence to a bare DSP instance, rather than debugging inside the full kernel).
+- **Stage 1 done (2026-09-26)** — the interpreter is now bit-exact against the JIT: `mnm-golden`
+  hash-matches on all 22 machines. Root cause was `decode_LLL_read`'s case 4/5 (plain
+  `move a,l:(rN)` / `move b,l:(rN)`) missing the 48-bit transfer saturation the JIT applies there —
+  found by capturing the exact register state at the real divergence point (Monomodule's
+  sine-table-build loop, right where the accumulator crosses -1.0) and replaying the loop body in
+  both engines, diffing full registers after every instruction rather than tracing instruction
+  counts (which doesn't survive JIT/interpreter hardware-loop batching — see
+  `libs/dsp56300/docs/ARM32_JIT.md` for what didn't work, for next time). Also fixed along the way:
+  dsp56300#8 (out-of-range-read divergence). **Next: Stage 2** (dispatch-only JIT prototype) — not
+  yet started.
 - Xenia (Microwave XT) parked: same dsp56300 core, much heavier DSP load (~100MHz-class vs.
   Monomodule's ~21M instr/s) — check with Gearmulator's `virusTestConsole`-style instruction-rate
   measurement before assuming this JIT makes Xenia viable too.
