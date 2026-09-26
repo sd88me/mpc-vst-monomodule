@@ -73,6 +73,11 @@ checkpoint, not just at the end.
   result". With the JIT ruled out, this port needs the interpreter itself to get faster (150-285% of
   one core today), or it gets shelved.
 
+- **2026-09-26: SHELVED.** The on-device perf profile of the interpreter is flat (the largest symbol
+  is 10.5%, MAC/MPY about 18% in total, per-instruction overhead about 31%), so the best case from
+  optimizing the interpreter is about 1.45x against the ~2.5-4x needed. See ARM32_JIT.md,
+  "Interpreter profile on the Force".
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
