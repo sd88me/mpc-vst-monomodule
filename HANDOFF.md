@@ -39,8 +39,15 @@ checkpoint, not just at the end.
   both engines, diffing full registers after every instruction rather than tracing instruction
   counts (which doesn't survive JIT/interpreter hardware-loop batching — see
   `libs/dsp56300/docs/ARM32_JIT.md` for what didn't work, for next time). Also fixed along the way:
-  dsp56300#8 (out-of-range-read divergence). **Next: Stage 2** (dispatch-only JIT prototype) — not
-  yet started.
+  dsp56300#8 (out-of-range-read divergence).
+- **Stage 2 in progress (2026-09-26)** — the calling shape (hand-written Thumb-2 blocks calling
+  into existing interpreter opcode handlers) and its ABI assumptions are proven end-to-end, on x86
+  and on a real armhf binary under qemu-arm. The actual block compiler and the on-device timing
+  measurement (the whole point of this stage) haven't been started — paused here because the user
+  was near a usage limit, not because of any blocker. Next step is written out precisely in
+  `libs/dsp56300/docs/ARM32_JIT.md`'s Stage 2 section: compile Stage 1's already-understood
+  sine-table loop body into one block and time it against the interpreter on the Force
+  (`root@192.168.1.44`, confirmed reachable). Bail-out gate unchanged: >=1.3x speedup or stop.
 - Xenia (Microwave XT) parked: same dsp56300 core, much heavier DSP load (~100MHz-class vs.
   Monomodule's ~21M instr/s) — check with Gearmulator's `virusTestConsole`-style instruction-rate
   measurement before assuming this JIT makes Xenia viable too.
