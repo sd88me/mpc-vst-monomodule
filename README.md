@@ -12,6 +12,7 @@ from your own OS file with `release/build_from_os.sh`.
 Not affiliated with Elektron or with shnolk's Monomodule. Requires your own Monomachine OS file (see
 below); nothing of Elektron's is included or distributed.
 
+
 ## Why this exists
 
 The Monomachine's sound comes from a Motorola DSP56300 chip, and Monomodule emulates it instruction
@@ -22,7 +23,7 @@ translates that trace ahead of time into native ARM code, and strips out per-ins
 interpreter can't. The result is bit-exact with the original emulator and runs at roughly the pace the
 DSP thread needs. The technical detail is at the bottom of this README and in
 [`libs/dsp56300/docs/ARM32_JIT.md`](libs/dsp56300/docs/ARM32_JIT.md).
-
+<img width="1280" height="800" alt="2026-09-27T112814157Z" src="https://github.com/user-attachments/assets/b2e0db94-40a6-4b6d-ac32-b13ef54a8562" />
 ## What's a faithful port, and what we added
 
 **Faithful to upstream Monomodule** (same engine, same numbers, same layout logic):
