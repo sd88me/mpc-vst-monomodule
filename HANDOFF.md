@@ -146,6 +146,16 @@ checkpoint, not just at the end.
   callback (no plugin thread).** Simpler and no starvation risk, but the heaviest machines (~69% of a core) would
   then be inside the AudioWorker's deadline; needs a measurement with the recompiled code first.
 
+- **2026-09-27: exact upstream skin built and running on the Force (user: "looks great for first pass, controls fine").**
+  `vst/skin/`: `mnm_artdump.cpp` dumps the LCD art + UI spec from the user's OS file (built against upstream RomArt/SpecData),
+  `mk_skin.py` draws the One editor at its native 3x scale as an MPC skin (static background; 128-frame filmstrip per cell
+  *kind*; per-machine SYN grid/bar overlays via IndexedEnabling on `machine`; LEV = 4 stacked strips; picker = panel + one
+  button per machine behind `machine__open`; LFO2|LFO3 tabs via `lfo23tab`, DEST names via `lfoN_pagesel`/`lfo23dest`).
+  `build_skin.sh <os.syx>` runs it (Docker); `ink=`/`paper=` args recolour (upstream's INVERTED / LOW CONTRAST presets).
+  Params now 64 (append-only: 58 knobs, machine__open, lfo1-3_pagesel, lfo23tab, lfo23dest); `vst.json` has
+  `custom_skin: true` (new gen_vst option in mpc-vst). Engine: DSP thread pinned to the least busy non-UI core, parks after 2 s silence.
+  Not done: preset strip, BPM/host tempo, menu/skin dialog, install flow from the user's OS file, wider discovery workload.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
