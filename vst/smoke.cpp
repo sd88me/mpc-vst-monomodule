@@ -44,6 +44,14 @@ int main(int argc, char** argv)
     static int16_t out[128 * 2];
     int peak = 0; const uint8_t on[3] = {0x90, 45, 100}, off[3] = {0x80, 45, 0};
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    if (getenv("SMOKE_IDLE")) {   // no note: the DSP should park after 2 s and cost ~nothing
+        const double c0 = dspCpuSeconds(); const auto ti = Clock::now();
+        static int16_t junk[128 * 2];
+        for (int b = 0; b < 6 * 44100 / 128; ++b) { std::this_thread::sleep_for(std::chrono::microseconds(2902)); e->render(in, junk, 128); }
+        e->get_param(in, "parked", buf, sizeof buf);
+        printf("idle 6 s: dsp-thread cpu %.1f%% parked=%s\n", 100.0 * (dspCpuSeconds() - c0) / std::chrono::duration<double>(Clock::now() - ti).count(), buf);
+    }
+    e->get_param(in, "core", buf, sizeof buf); printf("core %s\n", buf);
     e->midi(in, on, 3);
     const double cpu0 = dspCpuSeconds(); const auto t1 = Clock::now();
     auto next = t1;

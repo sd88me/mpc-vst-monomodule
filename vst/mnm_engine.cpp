@@ -74,12 +74,48 @@ void defaultsFor(int machineSlot, int* out /*[32] SYN AMP FILT EFX*/)
     }
 }
 
+// One engine per core, never the UI core (MPC's main thread lives on cpu0): take the least busy of cores 1..N-1
+// (sampled from /proc/stat over 100 ms) that no other instance of this plugin already uses.
+std::atomic<unsigned> g_usedCores{0};
+int chooseCore()
+{
+    auto sample = [](unsigned long long* busy, unsigned long long* total, int n) {
+        FILE* f = std::fopen("/proc/stat", "r");
+        if (!f) return;
+        char line[256];
+        while (std::fgets(line, sizeof line, f)) {
+            int c; unsigned long long u, ni, s, id, io, ir, so, st;
+            if (std::sscanf(line, "cpu%d %llu %llu %llu %llu %llu %llu %llu %llu", &c, &u, &ni, &s, &id, &io, &ir, &so, &st) == 9 && c >= 0 && c < n) {
+                busy[c] = u + ni + s + ir + so + st; total[c] = busy[c] + id + io;
+            }
+        }
+        std::fclose(f);
+    };
+    const int n = int(std::min<long>(sysconf(_SC_NPROCESSORS_ONLN), 8));
+    if (n < 2) return -1;
+    unsigned long long b0[8] = {}, t0[8] = {}, b1[8] = {}, t1[8] = {};
+    sample(b0, t0, n);
+    struct timespec ts{0, 100000000};
+    nanosleep(&ts, nullptr);
+    sample(b1, t1, n);
+    int best = -1; double bestLoad = 2;
+    const unsigned used = g_usedCores.load();
+    for (int c = 1; c < n; ++c) {
+        const double dt = double(t1[c] - t0[c]);
+        double load = dt > 0 ? double(b1[c] - b0[c]) / dt : 0;
+        if (used & (1u << c)) load += 1.0;   // another instance already runs there: last resort
+        if (load < bestLoad) { bestLoad = load; best = c; }
+    }
+    if (best >= 0) g_usedCores.fetch_or(1u << best);
+    return best;
+}
+
 struct NoteEv { int8_t type; int8_t note; };   // 1 on, 2 off, 3 all off
 
 struct Inst {
     std::string osPath;
     std::atomic<int> param[kNumSlots];
-    std::atomic<bool> stop{false}, ready{false};
+    std::atomic<bool> stop{false}, ready{false}, parked{false};
     std::atomic<uint32_t> underruns{0}, blocks{0};
     // note queue (host thread -> DSP thread)
     NoteEv notes[256];
@@ -88,6 +124,7 @@ struct Inst {
     alignas(64) int16_t ring[kRing][kFrames * 2];
     std::atomic<uint32_t> rWrite{0}, rRead{0};
     std::thread th;
+    int core = -1;
     FILE* trace = nullptr;   // /tmp/mnm_trace.on present at create: log every set/get to /tmp/mnm_trace.log
 
     Inst()
@@ -132,7 +169,8 @@ void Inst::run()
     int prio = 30;
     if (const char* e = std::getenv("MNM_FIFO")) prio = std::atoi(e);
     if (prio > 0) { sched_param sp{}; sp.sched_priority = prio; pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp); }
-    if (const char* c = std::getenv("MNM_CPU")) { cpu_set_t s; CPU_ZERO(&s); CPU_SET(std::atoi(c), &s); sched_setaffinity(0, sizeof s, &s); }
+    core = std::getenv("MNM_CPU") ? std::atoi(std::getenv("MNM_CPU")) : chooseCore();
+    if (core >= 0) { cpu_set_t s; CPU_ZERO(&s); CPU_SET(core, &s); sched_setaffinity(0, sizeof s, &s); }
 
     auto& h = voice->host();
     int applied[kNumSlots];
@@ -140,6 +178,8 @@ void Inst::run()
     int machineSlot = -1;
     int held[16], nHeld = 0;
     bool muted = false;
+    uint32_t silentBlocks = 0;
+    constexpr uint32_t kParkAfter = 44100 * 2 / kFrames;   // 2 s of exact silence with no note held
     std::vector<float> L(kFrames), R(kFrames);
     ready.store(true);
 
@@ -174,7 +214,7 @@ void Inst::run()
         for (; r != nw; ++r) {
             const NoteEv e = notes[r & 255];
             if (e.type == 1) {
-                muted = false;
+                muted = false; parked = false; silentBlocks = 0;
                 int n = 0;
                 for (int i = 0; i < nHeld; ++i) if (held[i] != e.note) held[n++] = held[i];
                 nHeld = n;
@@ -191,13 +231,23 @@ void Inst::run()
         }
         nRead.store(r, std::memory_order_release);
 
-        voice->process(L.data(), R.data(), kFrames);
         int16_t* out = ring[w % kRing];
+        if (parked) {   // idle: advance the host model only (the DSP's free-running state stops where it was)
+            voice->skip(kFrames);
+            std::memset(out, 0, sizeof(int16_t) * kFrames * 2);
+            rWrite.store(w + 1, std::memory_order_release);
+            blocks.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
+        voice->process(L.data(), R.data(), kFrames);
         for (int i = 0; i < kFrames; ++i) {
             const float l = muted ? 0.f : L[size_t(i)], rr = muted ? 0.f : R[size_t(i)];
             out[2 * i] = int16_t(std::lrint(std::clamp(l, -1.f, 1.f) * 32767.f));
             out[2 * i + 1] = int16_t(std::lrint(std::clamp(rr, -1.f, 1.f) * 32767.f));
         }
+        bool silent = true;
+        for (int i = 0; i < kFrames * 2; ++i) if (out[i]) { silent = false; break; }
+        if (silent && nHeld == 0) { if (++silentBlocks >= kParkAfter) parked = true; } else silentBlocks = 0;
         rWrite.store(w + 1, std::memory_order_release);
         blocks.fetch_add(1, std::memory_order_relaxed);
         if (voice->engine().faulted()) { std::fprintf(stderr, "[monomodule] DSP fault: %s\n", voice->engine().faultReason().c_str()); return; }
@@ -220,6 +270,7 @@ void eDestroy(void* p)
     auto* in = static_cast<Inst*>(p);
     in->stop.store(true);
     if (in->th.joinable()) in->th.join();
+    if (in->core >= 0) g_usedCores.fetch_and(~(1u << in->core));
     delete in;
 }
 void eMidi(void* p, const uint8_t* m, int len)
@@ -259,6 +310,8 @@ int eGet(void* p, const char* key, char* buf, int len)
         return n;
     }
     if (!std::strcmp(key, "underruns")) return std::snprintf(buf, size_t(len), "%u", in->underruns.load());
+    if (!std::strcmp(key, "core")) return std::snprintf(buf, size_t(len), "%d", in->core);
+    if (!std::strcmp(key, "parked")) return std::snprintf(buf, size_t(len), "%d", int(in->parked.load()));
     if (!std::strcmp(key, "ready")) return std::snprintf(buf, size_t(len), "%d", int(in->ready.load()));
     return 0;
 }

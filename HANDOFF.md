@@ -142,6 +142,9 @@ checkpoint, not just at the end.
   JV-880, and compare with a stock MPC instrument (Bassline). Also unrelated but real: `mnm-dsp` was unpinned on
   core 0 (MPC UI core) at FIFO 30 and ~46% idle load: pin it and add idle-skip (see the design notes above).
   The debug trace (`/tmp/mnm_trace.on` -> `/tmp/mnm_trace.log`) is still in `mnm_engine.cpp`; harmless when the file is absent.
+- **TODO (user request, 2026-09-27): later, also try the alternative where the DSP runs inside MPC's own audio
+  callback (no plugin thread).** Simpler and no starvation risk, but the heaviest machines (~69% of a core) would
+  then be inside the AudioWorker's deadline; needs a measurement with the recompiled code first.
 
 ## Resuming
 
