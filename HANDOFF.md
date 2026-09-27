@@ -234,6 +234,16 @@ checkpoint, not just at the end.
   `/sdcard/vst/monomodule/dumps/factory.syx` for the user to try; **this is Elektron's own factory content extracted from the
   user's own OS file -- never commit or distribute the .syx itself**, only the extractor.
 
+- **2026-09-27: dumps folder watched in parallel, rescanned live (no reinsert needed).** Two folders, both scanned every ~3s
+  on a background thread (cheap: filenames+size+mtime signature; the full .syx parse only runs when that changes):
+  `/sdcard/vst/monomodule/dumps/` (manual SD-card copy) and `/sdcard/Force Documents/Monomachine Dumps/` (MPC's own
+  Documents browser, verified writable by a plugin -- see NOTES "Beyond synths"). Cost measured negligible (a stat() loop
+  on a low-priority thread, not the audio path); not yet measured precisely on-device. Old catalogs are kept (not freed)
+  until the instance is destroyed, since a concurrent get_param() could still hold a pointer to one -- bounded by how many
+  times the user edits the dumps folder in one session, not a real leak. Next idea from the user: an in-skin file picker
+  to bring a .syx in from a location the plugin doesn't already watch -- parked, current answer (two watched folders) may
+  already cover it.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.

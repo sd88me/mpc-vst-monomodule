@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <string>
 #include <vector>
 #include <thread>
@@ -150,20 +151,40 @@ struct PresetSound {
     int level;
     uint8_t params[56];   // SYN AMP FILT EFX (32) + LFO 1-3 (24), raw
 };
-struct Catalog { std::vector<PresetSound> sounds; };
+struct Catalog { std::vector<PresetSound> sounds; uint64_t signature = 0; };
 
-Catalog* buildCatalog(const std::string& dir)
+// A cheap signature of every .syx in the watched folders (name, size, mtime): scanDumps() re-samples this every
+// few seconds on a background thread, and only re-parses (buildCatalog) when it actually changes.
+uint64_t scanDumps(const std::vector<std::string>& dirs, std::vector<std::string>* files)
+{
+    uint64_t h = 1469598103934665603ull;
+    auto mix = [&](uint64_t v) { h ^= v; h *= 1099511628211ull; };
+    std::vector<std::string> found;
+    for (const auto& dir : dirs) {
+        if (DIR* d = opendir(dir.c_str())) {
+            while (dirent* e = readdir(d)) {
+                const size_t n = std::strlen(e->d_name);
+                if (n > 4 && strcasecmp(e->d_name + n - 4, ".syx") == 0) found.push_back(dir + "/" + e->d_name);
+            }
+            closedir(d);
+        }
+    }
+    std::sort(found.begin(), found.end());
+    for (const auto& path : found) {
+        for (char c : path) mix(uint8_t(c));
+        struct stat st{};
+        if (stat(path.c_str(), &st) == 0) { mix(uint64_t(st.st_size)); mix(uint64_t(st.st_mtime)); }
+    }
+    if (files) *files = found;
+    return h;
+}
+
+Catalog* buildCatalog(const std::vector<std::string>& dirs, uint64_t sig)
 {
     auto* cat = new Catalog();
+    cat->signature = sig;
     std::vector<std::string> files;
-    if (DIR* d = opendir(dir.c_str())) {
-        while (dirent* e = readdir(d)) {
-            const size_t n = std::strlen(e->d_name);
-            if (n > 4 && strcasecmp(e->d_name + n - 4, ".syx") == 0) files.push_back(dir + "/" + e->d_name);
-        }
-        closedir(d);
-    }
-    std::sort(files.begin(), files.end());
+    scanDumps(dirs, &files);
     std::vector<std::string> seen;
     for (const auto& path : files) {
         FILE* f = std::fopen(path.c_str(), "rb");
@@ -216,7 +237,8 @@ struct Inst {
     std::atomic<Catalog*> cat{nullptr};
     int presetIdx = 0;               // 0 = Init, k = the machine's k-th sound; control thread only
     int snap[kNumSlots] = {};        // the loaded preset's values (slots 1..57), to tell "modified"
-    std::string dumpsDir;
+    std::vector<std::string> dumpDirs;
+    std::vector<Catalog*> retiredCats;   // freed at destroy, not on rescan: a concurrent get_param() may still hold the old pointer briefly
     int core = -1;
     FILE* trace = nullptr;   // /tmp/mnm_trace.on present at create: log every set/get to /tmp/mnm_trace.log
 
@@ -473,8 +495,23 @@ void* eCreate(const char* dataDir)
     if (access("/tmp/mnm_trace.on", F_OK) == 0) in->trace = std::fopen("/tmp/mnm_trace.log", "a");
     if (const char* p = std::getenv("MNM_OS")) in->osPath = p;
     else in->osPath = std::string(dataDir && *dataDir ? dataDir : ".") + "/Elektron_SFX6-60_OS1.32B.syx";
-    in->dumpsDir = std::string(dataDir && *dataDir ? dataDir : ".") + "/dumps";
-    in->catTh = std::thread([in] { in->cat.store(buildCatalog(in->dumpsDir)); });
+    const std::string base = dataDir && *dataDir ? dataDir : ".";
+    in->dumpDirs = {base + "/dumps", "/sdcard/Force Documents/Monomachine Dumps"};   // manual copy (SD card) and MPC's own Documents browser
+    in->catTh = std::thread([in] {
+        while (!in->stop.load(std::memory_order_acquire)) {
+            const uint64_t sig = scanDumps(in->dumpDirs, nullptr);
+            const Catalog* cur = in->cat.load(std::memory_order_relaxed);
+            if (!cur || cur->signature != sig) {
+                Catalog* next = buildCatalog(in->dumpDirs, sig);
+                Catalog* old = in->cat.exchange(next, std::memory_order_release);
+                if (old) in->retiredCats.push_back(old);
+            }
+            for (int i = 0; i < 30 && !in->stop.load(std::memory_order_acquire); ++i) {   // ~3 s between scans, checked often enough to exit quickly
+                struct timespec ts{0, 100000000};
+                nanosleep(&ts, nullptr);
+            }
+        }
+    });
     in->th = std::thread([in] { in->run(); });
     return in;
 }
@@ -484,6 +521,7 @@ void eDestroy(void* p)
     in->stop.store(true);
     if (in->th.joinable()) in->th.join();
     if (in->catTh.joinable()) in->catTh.join();
+    for (auto* c : in->retiredCats) delete c;
     if (in->core >= 0) g_usedCores.fetch_and(~(1u << in->core));
     delete in;
 }
