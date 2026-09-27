@@ -263,6 +263,13 @@ checkpoint, not just at the end.
   All three layouts (tabs/2x2/grid) and both plugins rebuilt and visually re-checked after these fixes before
   deploying. Installed on the Force (2x2, black-on-white, both plugins) -- **not yet tested on the device.**
 
+- **2026-09-27: bank selector REVERTED (user: "Wait you changed our layout? That's not ok").** Deploying it moved
+  PRESET's position (to make room for the new BANK row) and changed the machine-picker overlay's height, neither of
+  which was called out before pushing to the device -- should have shown a preview and asked first. Rolled back to
+  commit `1e0fd03` for `vst/mnm_engine.cpp`, `vst/gen_params.py`, `vst/skin/mk_skin.py`, both params.json; rebuilt and
+  redeployed, hashes/file-counts matched the pre-bank-selector build exactly. **Next attempt: BANK stepper ABOVE
+  PRESET (user's explicit order), and preview + confirm before deploying anything that shifts existing layout.**
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
