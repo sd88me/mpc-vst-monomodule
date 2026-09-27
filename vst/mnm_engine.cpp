@@ -22,6 +22,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "MonoVoice.h"
 #include "firmware/Firmware.h"
@@ -87,6 +88,7 @@ struct Inst {
     alignas(64) int16_t ring[kRing][kFrames * 2];
     std::atomic<uint32_t> rWrite{0}, rRead{0};
     std::thread th;
+    FILE* trace = nullptr;   // /tmp/mnm_trace.on present at create: log every set/get to /tmp/mnm_trace.log
 
     Inst()
     {
@@ -207,6 +209,7 @@ void* eCreate(const char* dataDir)
     // the JIT path has no 32-bit ARM backend; the recompiled interpreter is the only one that works there
     setenv("MNM_DSP_INTERP", "1", 0);
     auto* in = new Inst();
+    if (access("/tmp/mnm_trace.on", F_OK) == 0) in->trace = std::fopen("/tmp/mnm_trace.log", "a");
     if (const char* p = std::getenv("MNM_OS")) in->osPath = p;
     else in->osPath = std::string(dataDir && *dataDir ? dataDir : ".") + "/Elektron_SFX6-60_OS1.32B.syx";
     in->th = std::thread([in] { in->run(); });
@@ -234,6 +237,7 @@ void eSet(void* p, const char* key, const char* val)
     const int s = slotOf(key);
     if (s < 0) return;
     const int v = int(std::lround(std::atof(val)));
+    if (in->trace) { std::fprintf(in->trace, "set %s '%s' -> %d\n", key, val, v); std::fflush(in->trace); }
     if (s == kSlotMachine) {
         const int m = std::clamp(v, 0, kNumMachines - 1);
         if (m == in->param[kSlotMachine].load()) return;
@@ -249,7 +253,11 @@ int eGet(void* p, const char* key, char* buf, int len)
 {
     auto* in = static_cast<Inst*>(p);
     const int s = slotOf(key);
-    if (s >= 0) return std::snprintf(buf, size_t(len), "%d", in->param[s].load());
+    if (s >= 0) {
+        const int n = std::snprintf(buf, size_t(len), "%d", in->param[s].load());
+        if (in->trace) { std::fprintf(in->trace, "get %s = %s\n", key, buf); std::fflush(in->trace); }
+        return n;
+    }
     if (!std::strcmp(key, "underruns")) return std::snprintf(buf, size_t(len), "%u", in->underruns.load());
     if (!std::strcmp(key, "ready")) return std::snprintf(buf, size_t(len), "%d", int(in->ready.load()));
     return 0;

@@ -134,6 +134,15 @@ checkpoint, not just at the end.
   restart MPC and edit MPC.settings. Known mpc-vst gotcha: an auto-layout with a popup fails unless the layout is
   copied to a real layout.conf first (done).
 
+- **2026-09-27: Q-Link bug PARKED until the VST is ready (user decision).** On the Force, Monomodule One (and the
+  JV-880) Q-Links on 0..127 params climb 1,2,3 then restart near 0 (LEVEL 100 -> 101 -> ~1). Traced: MPC sets exact
+  k/128 steps and restarts from ~1/128 each touch even though getParameter returns the right (shadow) value; the
+  wrapper fix eb2ee55 is in both deployed .so files and is not enough. Not a Monomodule engine issue (the engine
+  reads back what it is given). Next steps when picked up: trace every call MPC makes around a Q-Link touch on the
+  JV-880, and compare with a stock MPC instrument (Bassline). Also unrelated but real: `mnm-dsp` was unpinned on
+  core 0 (MPC UI core) at FIFO 30 and ~46% idle load: pin it and add idle-skip (see the design notes above).
+  The debug trace (`/tmp/mnm_trace.on` -> `/tmp/mnm_trace.log`) is still in `mnm_engine.cpp`; harmless when the file is absent.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
