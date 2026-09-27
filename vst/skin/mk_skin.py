@@ -37,23 +37,35 @@ if os.path.isfile(_conf):
             args[_k.strip()] = _v.strip()
 args.update(dict(a.split("=", 1) for a in sys.argv[4:]))
 # colours: upstream's skin presets (Skin.h): default black on white, inverted, low contrast; custom = ink=/paper=
-PRESETS = {"default": ("000000", "ffffff"), "inverted": ("ffffff", "000000"), "lowcontrast": ("5c5c5c", "c4c4c4")}
-_ink, _paper = PRESETS.get(args.get("skin", "default"), PRESETS["default"])
+PRESETS = {"default": ("000000", "ffffff"), "inverted": ("ffffff", "000000"), "lowcontrast": ("5c5c5c", "c4c4c4"),
+           # backlit-LCD looks (bright ink on a dark tint), after the Elektron units' display colours
+           "red": ("ff3b2e", "1c0403"), "blue": ("5ab0ff", "04112b"), "green": ("52ff70", "031608"), "orange": ("ffa11f", "1e1000")}
+_skin = args.get("skin", "default")
+_swap = _skin.endswith("-inverted") and _skin != "-inverted"      # "<colour>-inverted": the same pair, ink and paper swapped
+_ink, _paper = PRESETS.get(_skin[:-9] if _swap else _skin, PRESETS["default"])
+if _swap:
+    _ink, _paper = _paper, _ink
 _ink, _paper = args.get("ink", _ink), args.get("paper", _paper)
 
-S = int(args.get("scale", "4"))   # screen px per LCD px (upstream draws at 3; 4 fits two pages per tab on the Force)
+LAYOUT = args.get("layout", "tabs")   # "tabs": two pages per tab at 4x (LFO2|LFO3 share a page); "2x2": four pages per tab at 3x
+TABS = LAYOUT == "tabs"
+S = int(args.get("scale", "4" if TABS else "3"))   # screen px per LCD px (upstream draws at 3)
 SKIN_W, SKIN_H = 1280, 628
 CELL, LABEL_Y, CONTENT_Y, CONTENT_H, VALUE_Y, VALUE_H = 32, 3, 9, 14, 23, 9
-TITLE_H, GRID_Y, LCD_W = 10, 11, 129
-PAGE_LCD_H = GRID_Y + 2 * CELL + 1      # 76
-TAB_OVERHANG = 2
+TITLE_H, GRID_Y = 10, 11
 MARG, GAPX, BAR_ROWS, PAGE_GAP = 10, 8, 26, 12
+# cell width in LCD px (upstream 32): wider cells use the whole width; the default fills the skin
+CW = int(args.get("cellw", str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
+LCD_W = 4 * CW + 1                          # a page (upstream 129)
+PAGE_LCD_H = GRID_Y + 2 * CELL + 1      # 76
+TAB_OVERHANG = 2 if TABS else 0
+PAGE_ROWS = 1 if TABS else 2
 LEV_W = 19 * S
 PAGES_W = 2 * LCD_W * S + PAGE_GAP
-BAR_X_W = MARG + LEV_W + GAPX           # window x of the machine block and the first page
+BAR_X_W = MARG + LEV_W + GAPX           # window x of the machine block (right of the logo)
 TOP = 8 + BAR_ROWS * S + 8 + TAB_OVERHANG * S      # window y of the pages' title bars
-WIN_W = BAR_X_W + PAGES_W + MARG
-WIN_H = TOP + PAGE_LCD_H * S + 8
+WIN_W = MARG + PAGES_W + MARG
+WIN_H = TOP + PAGE_ROWS * PAGE_LCD_H * S + (PAGE_ROWS - 1) * PAGE_GAP + 8
 OX, OY = (SKIN_W - WIN_W) // 2, (SKIN_H - WIN_H) // 2
 FRAMES = 128
 
@@ -188,18 +200,18 @@ def draw_switch(cv, x, y, idx, n):
 
 def cell_static(cv, x0, y0, p):
     """dotted top/left border, label and group tie: the parts of a knob cell that never change."""
-    cv.dots_h(x0, x0 + CELL, y0)
+    cv.dots_h(x0, x0 + CW, y0)
     cv.dots_v(x0, y0, y0 + CELL - 1)
     if p.display == "blank":
         return
-    cv.text_centred(F["tiny3x5"], p.label, x0 + 1, CELL - 1, y0 + LABEL_Y)
+    cv.text_centred(F["tiny3x5"], p.label, x0 + 1, CW - 1, y0 + LABEL_Y)
     if p.tie:
-        cv.blit(GROUP_TIE, x0 + CELL - 3, y0 - 1)
+        cv.blit(GROUP_TIE, x0 + CW - 3, y0 - 1)
 
 
 def cell_dynamic(cv, x0, y0, p, raw):
     """dial or icon plus the value row (upstream drawKnobCell minus border/label); (x0, y0) = the cell origin."""
-    inner_x, inner_w = x0 + 1, CELL - 1
+    inner_x, inner_w = x0 + 1, CW - 1
     if p.display in ("numeric", "bipolar"):
         rx, ry = inner_x + (inner_w - DIAL_RING.w) // 2, y0 + CONTENT_Y + (CONTENT_H - DIAL_RING.h) // 2
         cv.blit(DIAL_RING, rx, ry)
@@ -216,12 +228,12 @@ def cell_dynamic(cv, x0, y0, p, raw):
             elif p.display == "list":
                 draw_switch(cv, inner_x + (inner_w - RING_PLAIN.w) // 2, y0 + CONTENT_Y + (CONTENT_H - RING_PLAIN.h) // 2, idx, p.count)
     font = F["tiny3x5"]
-    bx, by, bw, bh = inner_x, y0 + VALUE_Y, CELL - 1, VALUE_H
+    bx, by, bw, bh = inner_x, y0 + VALUE_Y, CW - 1, VALUE_H
     cv.text_centred(font, value_text(p, raw), bx, bw, by + (bh - font.h) // 2)
 
 
 # frame region inside a cell: LCD x 1..31, y 9..31
-FR_X, FR_Y, FR_W, FR_H = 1, CONTENT_Y, CELL - 1, CELL - CONTENT_Y
+FR_X, FR_Y, FR_W, FR_H = 1, CONTENT_Y, CW - 1, CELL - CONTENT_Y
 
 
 def strip_for(p):
@@ -271,19 +283,19 @@ def strip_image(p, cache={}):
 
 
 defs, on_top = {}, []
-NTABS = 3
+NTABS = 3 if TABS else 2
 TABK = [[] for _ in range(NTABS)]   # components per tab (tab=None on place()/image_comp(): every tab)
 PREVIEW = []   # (image file, x, y, w, h, condition, frame index or None), in draw order, for the offline composite
 
 
-def knob_def(fn, w, h):
+def knob_def(fn, w, h, orient="Vertical"):
     key = "mnmKnob_%s" % fn[:-4]
     if key not in defs:
         defs[key] = ss._local(key, [ss._action("Mouse Down", "Q-Link"), ss._action("Double Click", "Show Overlay", "knob overlay"),
                                     ss._action("Enter Pressed", "Show Overlay", "knob overlay")],
                               [ss._focus(w, h),
                                ss._sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": fn, "numFrames": FRAMES - 1,
-                                                "invert": False, "dragOrientation": "Vertical", "handleName": "Data"},
+                                                "invert": False, "dragOrientation": orient, "handleName": "Data"},
                                        ss._bounds(0, 0, w, h), "Knob")])
     return key
 
@@ -324,13 +336,19 @@ def enabling(key, i, n):
 
 
 # ------------------------------------------------------------ page geometry (window coords -> skin px) --------------
-PAGE_SLOT = {"SYN": 0, "AMP": 1, "FILT": 0, "EFX": 1, "LFO1": 0, "LFO23": 1}     # left / right on its tab
-TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 1, "EFX": 1, "LFO1": 2, "LFO23": 2}
-PAGE_TITLE = {"SYN": "SYN", "AMP": "AMP", "FILT": "FILT", "EFX": "EFX", "LFO1": "LFO1", "LFO23": None}
+if TABS:
+    PAGE_POS = {"SYN": (0, 0), "AMP": (1, 0), "FILT": (0, 0), "EFX": (1, 0), "LFO1": (0, 0), "LFO23": (1, 0)}   # (column, row) on its tab
+    TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 1, "EFX": 1, "LFO1": 2, "LFO23": 2}
+    PAGE_TITLE = {"SYN": "SYN", "AMP": "AMP", "FILT": "FILT", "EFX": "EFX", "LFO1": "LFO1", "LFO23": None}
+else:
+    PAGE_POS = {"SYN": (0, 0), "AMP": (1, 0), "FILT": (0, 1), "EFX": (1, 1), "LFO1": (0, 0), "LFO2": (1, 0), "LFO3": (0, 1)}
+    TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 0, "EFX": 0, "LFO1": 1, "LFO2": 1, "LFO3": 1}
+    PAGE_TITLE = {n: n for n in PAGE_POS}
 
 
 def page_origin(name):
-    return OX + BAR_X_W + PAGE_SLOT[name] * (LCD_W * S + PAGE_GAP), OY + TOP    # skin px of the title bar's top-left
+    col, row = PAGE_POS[name]
+    return OX + MARG + col * (LCD_W * S + PAGE_GAP), OY + TOP + row * (PAGE_LCD_H * S + PAGE_GAP)    # skin px of the title bar's top-left
 
 
 def draw_tab(cv, x, w, bar_y, active):
@@ -368,7 +386,7 @@ def page_canvas(name, cells, tab=0):
             cv.text(F["bold8"], nm, x + 3, oy + 1, t == tab)
             x += tw + 2
     for k, p in enumerate(cells):
-        cell_static(cv, (k % 4) * CELL, oy + GRID_Y + (k // 4) * CELL, p)
+        cell_static(cv, (k % 4) * CW, oy + GRID_Y + (k // 4) * CELL, p)
     cv.dots_v(LCD_W - 1, oy + GRID_Y, oy + PAGE_LCD_H - 1)
     cv.dots_h(0, LCD_W - 1, oy + PAGE_LCD_H - 1)
     return cv, oy
@@ -576,18 +594,13 @@ def syn_params(m):
 bgs = [Image.new("RGB", (SKIN_W, SKIN_H), PAPER) for _ in range(NTABS)]
 
 # logo, LEV frame (on every tab)
-LEV_H_LCD = 11 + PAGE_LCD_H
-lev = Canvas(19, LEV_H_LCD)
-lev.text_centred(F["bold8"], "LEV", 0, 19, 1)
-fy, fh = 11, LEV_H_LCD - 11
-lev.dots_h(0, 18, fy); lev.dots_h(0, 18, fy + fh - 1); lev.dots_v(0, fy, fy + fh - 1); lev.dots_v(18, fy, fy + fh - 1)
-LEV_X, LEV_Y = OX + MARG, OY + TOP - 11 * S
 for b_ in bgs:
     draw_logo(b_, OX + MARG, OY + 8, LEV_W, 18 * S, INK)
-    b_.paste(lev.image(), (LEV_X, LEV_Y))
 
 # static pages (SYN uses the default machine's labels here; the overlay per machine repaints its grid)
-PAGE_CELLS = {"AMP": shared_params(0), "FILT": shared_params(1), "EFX": shared_params(2), "LFO1": lfo_params(), "LFO23": lfo_params()}
+PAGE_CELLS = {"AMP": shared_params(0), "FILT": shared_params(1), "EFX": shared_params(2), "LFO1": lfo_params()}
+for _n in (("LFO23",) if TABS else ("LFO2", "LFO3")):
+    PAGE_CELLS[_n] = lfo_params()
 default_machine = next(m for m in MACHINES if m["index"] == 4)
 PAGE_CELLS["SYN"] = syn_params(default_machine)
 for name, cells in PAGE_CELLS.items():
@@ -668,7 +681,7 @@ def cell_knobs(page, cells, keys, cond=None, tag=""):
         if p.display == "blank":
             continue
         fn, fw, fh = strip_image(p)
-        kx = x0 + ((k % 4) * CELL + FR_X) * S
+        kx = x0 + ((k % 4) * CW + FR_X) * S
         ky = y0 + (GRID_Y + (k // 4) * CELL + FR_Y) * S
         key = knob_def(fn, fw, fh)
         place(key, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], kx, ky, fw, fh, focus="No" if cond else "Yes", cond=cond, img=fn, raw=p.default, tab=TAB_OF[page])
@@ -679,7 +692,7 @@ for mi, m in enumerate(MACHINES):
 for page, si, key in (("AMP", 0, "amp"), ("FILT", 1, "filt"), ("EFX", 2, "efx")):
     cell_knobs(page, shared_params(si), ["%s%d" % (key, k) for k in range(8)])
 # LFO1: DEST per PAGE list entry
-for lfo, page in ((1, "LFO1"),):
+for lfo, page in (((1, "LFO1"),) if TABS else ((1, "LFO1"), (2, "LFO2"), (3, "LFO3"))):
     base = lfo_params()
     for k, p in enumerate(base):
         if p.display == "blank" or k == 1:
@@ -691,56 +704,62 @@ for lfo, page in ((1, "LFO1"),):
         blank = P({"label": "", "display": 0, "tieRight": 0, "default": 0, "max": 127, "count": 128, "icons": 0, "values": None})
         cell_knobs(page, [cells[1] if kk == 1 else blank for kk in range(8)], ["lfo%d_%d" % (lfo, kk) for kk in range(8)],
                    cond=enabling("lfo%d_pagesel" % lfo, pg, 9), tag=" (page %d)" % pg)
-# LFO2 | LFO3: tab-conditional cells; DEST per (tab, page)
-for tab, lfo in ((0, 2), (1, 3)):
-    base = lfo_params()
-    blank = P({"label": "", "display": 0, "tieRight": 0, "default": 0, "max": 127, "count": 128, "icons": 0, "values": None})
-    for k, p in enumerate(base):
-        if k == 1:
-            continue
-        cell_knobs("LFO23", [p if kk == k else blank for kk in range(8)], ["lfo%d_%d" % (lfo, kk) for kk in range(8)],
-                   cond=enabling("lfo23tab", tab, 2), tag=" (LFO%d)" % lfo)
-    for pg in range(9):
-        cells = lfo_params(pg)
-        cell_knobs("LFO23", [cells[1] if kk == 1 else blank for kk in range(8)], ["lfo%d_%d" % (lfo, kk) for kk in range(8)],
-                   cond=enabling("lfo23dest", tab * 9 + pg, 18), tag=" (LFO%d page %d)" % (lfo, pg))
+if TABS:
+    # LFO2 | LFO3: tab-conditional cells; DEST per (tab, page)
+    for tab, lfo in ((0, 2), (1, 3)):
+        base = lfo_params()
+        blank = P({"label": "", "display": 0, "tieRight": 0, "default": 0, "max": 127, "count": 128, "icons": 0, "values": None})
+        for k, p in enumerate(base):
+            if k == 1:
+                continue
+            cell_knobs("LFO23", [p if kk == k else blank for kk in range(8)], ["lfo%d_%d" % (lfo, kk) for kk in range(8)],
+                       cond=enabling("lfo23tab", tab, 2), tag=" (LFO%d)" % lfo)
+        for pg in range(9):
+            cells = lfo_params(pg)
+            cell_knobs("LFO23", [cells[1] if kk == 1 else blank for kk in range(8)], ["lfo%d_%d" % (lfo, kk) for kk in range(8)],
+                       cond=enabling("lfo23dest", tab * 9 + pg, 18), tag=" (LFO%d page %d)" % (lfo, pg))
 
-# LFO tab: LFO3-active title bar overlay + two invisible tab buttons
-lx, ly = page_origin("LFO23")
-cv3, oy3 = page_canvas("LFO23", lfo_params(), tab=1)
-bar_rows = oy3 + TITLE_H + 1
-fn = save_png("lfotab1", cv3.image().crop((0, 0, LCD_W * S, bar_rows * S)))
-image_comp("LFO3 tab", fn, lx, ly - oy3 * S, LCD_W * S, bar_rows * S, cond=enabling("lfo23tab", 1, 2), tab=2)
-clear = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
-save_png("clear", clear)
-for t, (tx, tw) in enumerate(tab_rects()):
-    key = "mnmTab_%d" % t
-    defs[key] = ss._local(key, [ss._action("Mouse Down", "Q-Link")], [ss._button("clear.png", "clear.png", t, 2, tw * S, (oy3 + TITLE_H) * S)])
-    place(key, "LFO tab %d" % (t + 2), PIDX["lfo23tab"], lx + tx * S, ly - oy3 * S, tw * S, (oy3 + TITLE_H) * S, focus="No", tab=2)
+    # LFO tab: LFO3-active title bar overlay + two invisible tab buttons
+    lx, ly = page_origin("LFO23")
+    cv3, oy3 = page_canvas("LFO23", lfo_params(), tab=1)
+    bar_rows = oy3 + TITLE_H + 1
+    fn = save_png("lfotab1", cv3.image().crop((0, 0, LCD_W * S, bar_rows * S)))
+    image_comp("LFO3 tab", fn, lx, ly - oy3 * S, LCD_W * S, bar_rows * S, cond=enabling("lfo23tab", 1, 2), tab=2)
+    clear = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    save_png("clear", clear)
+    for t, (tx, tw) in enumerate(tab_rects()):
+        key = "mnmTab_%d" % t
+        defs[key] = ss._local(key, [ss._action("Mouse Down", "Q-Link")], [ss._button("clear.png", "clear.png", t, 2, tw * S, (oy3 + TITLE_H) * S)])
+        place(key, "LFO tab %d" % (t + 2), PIDX["lfo23tab"], lx + tx * S, ly - oy3 * S, tw * S, (oy3 + TITLE_H) * S, focus="No", tab=2)
 
-# LEV: four stacked filmstrip segments of the framed area (LCD x 1..17, y 13..165)
-lev_x, lev_y = LEV_X, LEV_Y
-inner_y0, inner_h, seg_n = fy + 2, fh - 4, 4          # 13, 72
-seg_h = inner_h // seg_n                               # 18 rows
-key_lev = []
-for sgm in range(seg_n):
-    frames = []
-    for raw in range(FRAMES):
-        cv = Canvas(17, seg_h)
-        lvl = int(round(raw / 127.0 * inner_h))
-        for r in range(seg_h):
-            y_abs = inner_y0 + sgm * seg_h + r          # canvas row of the column
-            if y_abs >= inner_y0 + inner_h - lvl:
-                for c in range(2 - 1, 2 - 1 + (19 - 7) // 2):
-                    cv.set(c, r)
-        # the frame's own dotted border rows/cols that cross this segment (x=0 and x=18 lie outside 1..17)
-        frames.append(cv.image())
-    st = Image.new("RGB", (17 * S, seg_h * S * FRAMES))
-    for i, f in enumerate(frames):
-        st.paste(f, (0, i * seg_h * S))
-    fn = save_png("lev_%d" % sgm, st)
-    kd = knob_def(fn, 17 * S, seg_h * S)
-    place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x + 1 * S, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S, focus="Yes" if sgm == 0 else "No", img=fn, raw=100)
+
+# LEV, horizontal under the preset strip (upstream's LEV column turned on its side): "LEV", a dotted frame, a solid level bar
+LEV_ROWS = BAR_ROWS - STRIP_H - 1       # 10: the strip + LEV are as tall as the machine block
+lev_y = strip_y + (STRIP_H + 1) * S
+lev_lbl_w = text_width(F["bold8"], "LEV") + 4
+lv = Canvas(strip_w, LEV_ROWS)
+lv.text(F["bold8"], "LEV", 0, 1)
+fx0, fw_ = lev_lbl_w, strip_w - lev_lbl_w
+lv.dots_h(fx0, fx0 + fw_ - 1, 0); lv.dots_h(fx0, fx0 + fw_ - 1, LEV_ROWS - 1)
+lv.dots_v(fx0, 0, LEV_ROWS - 1); lv.dots_v(fx0 + fw_ - 1, 0, LEV_ROWS - 1)
+for t_, b_ in enumerate(bgs):
+    b_.paste(lv.image(), (strip_x, lev_y))
+    save_png("bg_%d" % t_, b_)
+bar_x0, bar_w_max = fx0 + 2, fw_ - 4          # the bar's room inside the frame
+zone_x, zone_w = fx0 + 1, fw_ - 2              # the touch/strip zone: the frame's interior
+frames = []
+for raw in range(FRAMES):
+    cv = Canvas(zone_w, LEV_ROWS - 2)
+    n_ = int(round(raw / 127.0 * bar_w_max))
+    cv.fill(bar_x0 - zone_x, 1, n_, LEV_ROWS - 4, True)
+    frames.append(cv.image())
+fw_px, fh_px = frames[0].size
+st = Image.new("RGB", (fw_px, fh_px * FRAMES))
+for i_, f_ in enumerate(frames):
+    st.paste(f_, (0, i_ * fh_px))
+fn = save_png("lev_h", st)
+kd = knob_def(fn, fw_px, fh_px, orient="Horizontal")
+place(kd, "LEV", PIDX["level"], strip_x + zone_x * S, lev_y + S, fw_px, fh_px, focus="Yes", img=fn, raw=100)
 
 # machine picker: field over the machine bar toggles machine__open; panel + one image button per machine
 pk_x, pk_y, pk_w, pk_h = OX + BAR_X_W, OY + TOP - TAB_OVERHANG * S, PAGES_W, 340
@@ -826,12 +845,20 @@ for mi, m in enumerate(MACHINES):
 on_top += parts
 
 # ------------------------------------------------------------------ assemble ----------------------------------------
-TAB_SETS = [   # per tab: the Q-Link pages (nested pages share the picture; each has its own 16 keys)
-    ("SYN / AMP", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)])]),
-    ("FILT / EFX", [("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
-    ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
-             ("LFO3 / MIX", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"])]),
-]
+if TABS:
+    TAB_SETS = [   # per tab: the Q-Link pages (nested pages share the picture; each has its own 16 keys)
+        ("SYN / AMP", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)])]),
+        ("FILT / EFX", [("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
+        ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
+                 ("LFO3 / MIX", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"])]),
+    ]
+else:
+    TAB_SETS = [
+        ("SYN / AMP / FILT / EFX", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)]),
+                                    ("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
+        ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
+                 ("LFO3 / MIX", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"])]),
+    ]
 pages, qmap = [], []
 comp_bg = {"version": 1, "colour": "ff%02x%02x%02x" % PAPER, "image": ""}
 for t, (tab_title, sets) in enumerate(TAB_SETS):
@@ -884,4 +911,5 @@ def preview(state, out, tab=0):
 for t in range(NTABS):
     preview({"machine": PREVIEW_MACHINE}, os.path.join(sys.argv[3], "preview_tab%d.png" % t), t)
 preview({"machine": PREVIEW_MACHINE, "machine__open": 1}, os.path.join(sys.argv[3], "preview_open.png"), 0)
-preview({"machine": PREVIEW_MACHINE, "lfo23tab": 1, "lfo23dest": 9}, os.path.join(sys.argv[3], "preview_lfo3.png"), 2)
+if TABS:
+    preview({"machine": PREVIEW_MACHINE, "lfo23tab": 1, "lfo23dest": 9}, os.path.join(sys.argv[3], "preview_lfo3.png"), 2)

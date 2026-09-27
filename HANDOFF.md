@@ -170,6 +170,12 @@ checkpoint, not just at the end.
   LFO defaults now match upstream (PAGE 0, DEST 64, TRIG 0, WAVE 0, MULT 1, SPD 64, INTL 0, DPTH 0). Params: 67.
   Next: a preset list (tap the selector), the install flow from the user's own OS file, wider discovery coverage.
 
+- **2026-09-27: skin layout options and more colours.** `vst/skin/skin.conf`: `layout=tabs` (4x, two pages per tab, LFO2|LFO3 tabbed) or
+  `layout=2x2` (3x, four pages per tab: SYN/AMP/FILT/EFX, then LFO1/LFO2/LFO3); cells are widened to fill the screen (`cellw=`);
+  LEV is now horizontal under the preset strip, the logo sits left of the machine block. Colours: default, inverted,
+  lowcontrast, red, blue, green, orange, and `<colour>-inverted` (ink/paper swapped). `preview_sheet.sh [layout]` makes a contact sheet.
+  The installed skin on the Force is still the previous (vertical LEV) tabs build until the user picks a layout + colour.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
