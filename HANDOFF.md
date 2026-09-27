@@ -244,6 +244,25 @@ checkpoint, not just at the end.
   to bring a .syx in from a location the plugin doesn't already watch -- parked, current answer (two watched folders) may
   already cover it.
 
+- **2026-09-27: bank selector added (real scrollable list confirmed NOT possible).** MPC's plugin skins need every
+  option image baked at build time (docs/NOTES "no text entry, no dynamic lists or images"), so a tap-to-browse list
+  of a runtime-variable preset count can't be built -- corrected an earlier wrong offer to the user. Built instead:
+  a second PREV/NEXT/name row (BANK, under PRESET, same stepper pattern) that narrows what PRESET steps through to
+  one dump file at a time ("" = ALL, pooled, the previous behaviour). PresetSound now carries which .syx it came
+  from; Catalog carries the distinct bank list. Params 76.
+  **Bugs found and fixed while adding the second row** (useful if this area breaks again):
+  - Reused the name `ROW_GAP` for the new row's own gap, silently overwriting the existing global of that name
+    (the gap between the two PAGE rows) -- broke FILT/EFX rendering (row 2) since it's computed after the clash.
+    Renamed to `STRIP_GAP`.
+  - `layout=tabs`'s horizontal LEV (used only there) assumed a fixed one-row-tall header; now needs room for two
+    stepper rows above it. Fixed by growing that layout's `BAR_ROWS` and switching PRESET/BANK to top-anchor
+    (right under the logo) instead of bottom-anchoring to the page tops, with LEV filling whatever's left above them.
+  - The machine-picker overlay's height was a hardcoded constant (340) sized for the old single-row header; with
+    the taller header it no longer reached the bottom of the pages, leaking knob values under it. Now computed from
+    `WIN_H` so it always covers every page row, in every layout.
+  All three layouts (tabs/2x2/grid) and both plugins rebuilt and visually re-checked after these fixes before
+  deploying. Installed on the Force (2x2, black-on-white, both plugins) -- **not yet tested on the device.**
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
