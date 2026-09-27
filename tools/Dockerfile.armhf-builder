@@ -1,0 +1,6 @@
+# Cross-compiler image for vst/build_so.sh. Build once: docker build -t mnm-armhf-builder -f tools/Dockerfile.armhf-builder .
+FROM debian:bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    crossbuild-essential-armhf cmake ninja-build git file ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+ENV CROSS_PREFIX=arm-linux-gnueabihf-

@@ -93,23 +93,27 @@ your own file: **the generated `.syx` is never committed, distributed or include
 
 ## Install / build from source
 
-There's no packaged release yet — build and deploy by hand:
+There's no packaged release yet — build and deploy by hand. Needs Docker and a sibling checkout of
+[mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins) (the shared wrapper and skin tooling).
 
 ```
-vst/build_so.sh <schwung-monomodule glue tree> <dsp56300 arm32 checkout> <dir with dsp56k_recomp.inl> <mpc-vst checkout>
-vst/skin/build_skin.sh <your-os.syx> <mpc-vst checkout> layout=2x2
+git submodule update --init --recursive
+vst/build_so.sh <dir with dsp56k_recomp.inl> <mpc-vst-plugins checkout>
+vst/skin/build_skin.sh <your-os.syx> <mpc-vst-plugins checkout> layout=2x2
 ```
 
-The first command cross-compiles `monomodule_one.so` and `monomodule_fx.so`; the second draws both
-skins from your OS file's art. Deploy by copying the `.so` files to `/sdcard/vst/` and the skin
-folders (`vst/build/skin/`, `vst/fx/build/skin/`) into `/sdcard/Synths/`, then register both plugins
-in `MPC.settings` — see `mpc-vst-plugins`' `docs/PORTING.md` and `.claude/skills/mpc-vst-plugin/SKILL.md`
-for the exact steps. Registering needs an MPC restart; a `.so` or skin-only update afterwards doesn't.
+The first command cross-compiles `monomodule_one.so` and `monomodule_fx.so` from this repo alone (the
+`cmake/`, `CMakeLists.txt` at the repo root, `libs/monomodule` and `libs/dsp56300` submodules, and the
+vendored engine glue in `vst/engine/`) plus mpc-vst-plugins' wrapper — no external glue tree needed.
+It builds its own cross-compiler image (`tools/Dockerfile.armhf-builder`) on first use. The second
+command draws both skins from your OS file's art. `<dir with dsp56k_recomp.inl>` is your own build of
+the static recompiler (`libs/dsp56300/tools/arm32jit_prototype/recomp/README.md`) — it embeds firmware
+words and must never be committed or distributed.
 
-**Known gap:** `build_so.sh`'s first argument is a `legsmechanical/schwung-monomodule`-derived glue
-tree (`DspEngine`/`MonoVoice` shadowing upstream, plus our own CMake targets) that isn't yet vendored
-into this repo — today it has to exist separately. Vendoring it here, per this project's own vendoring
-convention, is an open task.
+Deploy by copying the `.so` files to `/sdcard/vst/` and the skin folders (`vst/build/skin/`,
+`vst/fx/build/skin/`) into `/sdcard/Synths/`, then register both plugins in `MPC.settings` — see
+`mpc-vst-plugins`' `docs/PORTING.md` and `.claude/skills/mpc-vst-plugin/SKILL.md` for the exact steps.
+Registering needs an MPC restart; a `.so` or skin-only update afterwards doesn't.
 
 ## Status
 
@@ -150,9 +154,11 @@ About 62 MB per instance.
 [Monomodule](https://github.com/shnolk/monomodule) (by **shnolk**) is a chip-level emulation of the
 Elektron Monomachine, built on the [dsp56300](https://github.com/dsp56300/dsp56300) DSP56300 emulator
 core. `libs/monomodule` vendors its engine core (`src/core/`) unmodified; its own JUCE plugins/app
-aren't built. The engine glue pattern (`DspEngine`/`MonoVoice` shadowing upstream, one voice per
-instance) follows [legsmechanical/schwung-monomodule](https://github.com/legsmechanical/schwung-monomodule)'s
-approach for Ableton Move — see the build note above about vendoring that glue into this repo.
+aren't built. `vst/engine/` vendors a small, real performance patch to two of that core's files
+(`DspEngine`/`MonoVoice`) from
+[legsmechanical/schwung-monomodule](https://github.com/legsmechanical/schwung-monomodule)'s Ableton
+Move port of the same DSP core — see `vst/engine/VENDORED.md` for exactly what and why (a much cheaper
+block handoff, JIT-preserving reset, prewarm and idle-skip, and idle-loop patching).
 
 `libs/dsp56300` is `sd88me/dsp56300`, forked from the upstream DSP56300 emulator at branch `arm32`
 specifically for the 32-bit ARM static recompiler this port needed; it's independently useful to any
