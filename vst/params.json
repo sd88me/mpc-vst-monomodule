@@ -600,7 +600,8 @@
     "ON"
    ],
    "default": 0,
-   "momentary": true
+   "momentary": true,
+   "hold_ms": 900
   },
   {
    "key": "randomize_ampfilt",
@@ -610,7 +611,8 @@
     "ON"
    ],
    "default": 0,
-   "momentary": true
+   "momentary": true,
+   "hold_ms": 900
   },
   {
    "key": "randomize_lfo",
@@ -620,7 +622,8 @@
     "ON"
    ],
    "default": 0,
-   "momentary": true
+   "momentary": true,
+   "hold_ms": 900
   },
   {
    "key": "master_tune",
