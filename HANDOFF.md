@@ -187,6 +187,13 @@ checkpoint, not just at the end.
   defaults to upstream's 32 (crisp; only ~786 of 1280 px wide); `cellw=40..51` widens cells to fill the width. `layout=grid` and
   `layout=tabs` remain. Not installed on the Force yet: the user has not picked layout/colour.
 
+- **2026-09-27: 2x2 refined and installed (black on white).** `cellw=40`, equal margins and column gap (`gap=`), preset strip aligned with
+  the right-hand page. GLOBAL quadrant (tab 2, beside LFO3): LEV column + extra globals **master tune (400-440 Hz, engine
+  `setMasterTuneHz`), LPF key track, HPF key track (`setKeyTracking`)** - not in upstream's One editor; params 70 (append-only:
+  ...`preset_name`, `master_tune`, `lpf_key`, `hpf_key`). Q-Link pages: SYN/AMP, FILT/EFX, LFO1/LFO2, LFO3/GLOBAL.
+  Colour is a build option (a runtime colour control would multiply image memory; separate plugin-list entries per colour
+  sharing the .so are an unverified alternative). Presets: kit `.syx` dumps in `/sdcard/vst/monomodule/dumps/`, scanned at insert.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.

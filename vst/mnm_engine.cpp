@@ -51,7 +51,7 @@ constexpr host::Machine kMachines[kNumMachines] = {
     host::Machine::FM_STAT, host::Machine::FM_PAR, host::Machine::FM_DYN, host::Machine::VO6};
 
 // parameter slots: 0 machine, 1 level, 2.. = 4 pages x 8, then 3 LFOs x 8
-constexpr int kSlotMachine = 0, kSlotLevel = 1, kSlotPages = 2, kSlotLfo = 34, kSlotTab = 58, kNumSlots = 59;
+constexpr int kSlotMachine = 0, kSlotLevel = 1, kSlotPages = 2, kSlotLfo = 34, kSlotTab = 58, kSlotTune = 59, kSlotLpk = 60, kSlotHpk = 61, kNumSlots = 62;
 // lfoN_pagesel (N = 1..3) is the list index of that LFO's PAGE knob (raw 0..127 in 9 unequal buckets), so the skin
 // can show DEST's names for the page; setting it moves PAGE to that list entry's middle.
 constexpr int listIndex9(int raw) { return ((2 * raw + 1) * 9) >> 8; }
@@ -66,6 +66,9 @@ int slotOf(const char* key)
         const size_t n = std::strlen(pages[p]);
         if (!std::strncmp(key, pages[p], n) && key[n] >= '0' && key[n] <= '7' && !key[n + 1]) return kSlotPages + p * 8 + (key[n] - '0');
     }
+    if (!std::strcmp(key, "master_tune")) return kSlotTune;   // global (not part of a preset): master tune in Hz, 400..440
+    if (!std::strcmp(key, "lpf_key")) return kSlotLpk;        // LPF / HPF track the key (KIT > ASSIGN > KEY)
+    if (!std::strcmp(key, "hpf_key")) return kSlotHpk;
     if (!std::strcmp(key, "lfo23tab")) return kSlotTab;   // the LFO2 | LFO3 tab of the skin: skin state only
     if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && key[4] == '_' && key[5] >= '0' && key[5] <= '7' && !key[6])
         return kSlotLfo + (key[3] - '1') * 8 + (key[5] - '0');
@@ -202,6 +205,9 @@ struct Inst {
     {
         for (auto& p : param) p.store(0);
         loadInit(4);   // SWAVE SAW, as upstream One
+        param[kSlotTune].store(440);
+        param[kSlotLpk].store(1);   // the hardware's kit default: key tracking on
+        param[kSlotHpk].store(1);
     }
     ~Inst() { delete cat.load(); }
     // Init of a machine: its page defaults, default LFOs and level 100.
@@ -330,6 +336,12 @@ void Inst::run()
             const int v = std::clamp(param[kSlotLfo + i].load(std::memory_order_relaxed), 0, 127);
             if (v != applied[kSlotLfo + i]) { applied[kSlotLfo + i] = v; h.setLfoParam(i / 8, i % 8, v); }
         }
+        {   // globals: master tune, filter key tracking
+            const int tune = std::clamp(param[kSlotTune].load(std::memory_order_relaxed), 400, 440);
+            const int lpk = param[kSlotLpk].load(std::memory_order_relaxed) ? 1 : 0, hpk = param[kSlotHpk].load(std::memory_order_relaxed) ? 1 : 0;
+            if (tune != applied[kSlotTune]) { applied[kSlotTune] = tune; h.setMasterTuneHz(double(tune)); }
+            if (lpk != applied[kSlotLpk] || hpk != applied[kSlotHpk]) { applied[kSlotLpk] = lpk; applied[kSlotHpk] = hpk; h.setKeyTracking(lpk != 0, hpk != 0); }
+        }
         const int lv = std::clamp(param[kSlotLevel].load(std::memory_order_relaxed), 0, 127);
         if (lv != applied[kSlotLevel]) { applied[kSlotLevel] = lv; h.setLevel(lv); }
 
@@ -436,7 +448,7 @@ void eSet(void* p, const char* key, const char* val)
         in->markLoaded();
         return;
     }
-    in->param[s].store(std::clamp(v, 0, 127));
+    in->param[s].store(s == kSlotTune ? std::clamp(v, 400, 440) : s == kSlotLpk || s == kSlotHpk ? (v ? 1 : 0) : std::clamp(v, 0, 127));
 }
 int eGet(void* p, const char* key, char* buf, int len)
 {

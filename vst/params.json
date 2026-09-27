@@ -591,6 +591,33 @@
    "min": 0,
    "max": 0,
    "display": "string"
+  },
+  {
+   "key": "master_tune",
+   "name": "Master Tune",
+   "min": 400,
+   "max": 440,
+   "default": 440,
+   "unit": "Hz",
+   "display": "int"
+  },
+  {
+   "key": "lpf_key",
+   "name": "LPF Key Track",
+   "options": [
+    "OFF",
+    "ON"
+   ],
+   "default": 1
+  },
+  {
+   "key": "hpf_key",
+   "name": "HPF Key Track",
+   "options": [
+    "OFF",
+    "ON"
+   ],
+   "default": 1
   }
  ],
  "sections": [

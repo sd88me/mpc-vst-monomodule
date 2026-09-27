@@ -42,6 +42,10 @@ params.append({"key": "lfo23dest", "name": "LFO2/3 Dest View", "options": ["%s %
 params.append({"key": "preset_prev", "name": "Preset Prev", "min": 0, "max": 1, "momentary": True})
 params.append({"key": "preset_next", "name": "Preset Next", "min": 0, "max": 1, "momentary": True})
 params.append({"key": "preset_name", "name": "Preset", "min": 0, "max": 0, "display": "string"})
+# globals (not part of a preset): master tune in Hz and the filter key tracking of the hardware's KIT > ASSIGN > KEY
+params.append({"key": "master_tune", "name": "Master Tune", "min": 400, "max": 440, "default": 440, "unit": "Hz", "display": "int"})
+params.append({"key": "lpf_key", "name": "LPF Key Track", "options": ["OFF", "ON"], "default": 1})
+params.append({"key": "hpf_key", "name": "HPF Key Track", "options": ["OFF", "ON"], "default": 1})
 json.dump({"name": "Monomodule One", "params": params,
            "sections": [{"label": a, "keys": b} for a, b in sections]}, open("params.json", "w"), indent=1)
 print(len(params), "params")

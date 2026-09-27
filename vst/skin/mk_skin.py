@@ -57,9 +57,12 @@ SKIN_W, SKIN_H = 1280, 628
 CELL, LABEL_Y, CONTENT_Y, CONTENT_H, VALUE_Y, VALUE_H = 32, 3, 9, 14, 23, 9
 TITLE_H, GRID_Y = 10, 11
 MARG, GAPX, BAR_ROWS, PAGE_GAP = 10, 8, 26, (8 if GRID else 12)
+ROW_GAP = PAGE_GAP        # between the two rows of pages (PAGE_GAP, between the columns, may grow to share out spare width)
 # cell width in LCD px (upstream 32): wider cells use the whole width; the default fills the skin
-CW = int(args.get("cellw", "32" if (GRID or LAYOUT == "2x2") else str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
+CW = int(args.get("cellw", "32" if GRID else "40" if LAYOUT == "2x2" else str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
 LCD_W = 4 * CW + 1                          # a page (upstream 129)
+if LAYOUT == "2x2":   # equal margins and gap: the width the wider cells leave over is shared out
+    PAGE_GAP = MARG = int(args.get("gap", (SKIN_W - 2 * LCD_W * S) // 3))
 PAGE_LCD_H = GRID_Y + 2 * CELL + 1      # 76
 TAB_OVERHANG = 2 if TABS else 0
 PAGE_ROWS = 1 if TABS else 2
@@ -69,7 +72,7 @@ BAR_X_W = MARG + LEV_W + GAPX           # window x of the machine block (right o
 TOP = 4 if GRID else 8 + BAR_ROWS * S + 8 + TAB_OVERHANG * S      # window y of the pages' title bars
 PAGES_X0 = MARG + (LEV_W + GAPX if GRID else 0)   # grid: the logo/LEV column stands left of the pages
 WIN_W = PAGES_X0 + PAGES_W + MARG
-WIN_H = TOP + PAGE_ROWS * PAGE_LCD_H * S + (PAGE_ROWS - 1) * PAGE_GAP + 8
+WIN_H = TOP + PAGE_ROWS * PAGE_LCD_H * S + (PAGE_ROWS - 1) * ROW_GAP + 8
 OX, OY = (SKIN_W - WIN_W) // 2, (SKIN_H - WIN_H) // 2
 FRAMES = 128
 
@@ -178,10 +181,13 @@ class P:
         self.label, self.display = d["label"], DISPLAY[d["display"]]
         self.tie, self.default, self.max = d["tieRight"], d["default"], d["max"]
         self.count, self.icons, self.values = d["count"], d["icons"], values if values is not None else d["values"]
+        self.fmt = None   # optional raw -> text for a value row the spec doesn't describe (the extra global controls)
 
 
 def value_text(p, raw):
     raw = max(0, min(p.max, raw))
+    if p.fmt:
+        return p.fmt(raw)
     if p.display == "list":
         return p.values[list_index(raw, p.count)]
     if p.display == "readout":
@@ -242,7 +248,7 @@ FR_X, FR_Y, FR_W, FR_H = 1, CONTENT_Y, CW - 1, CELL - CONTENT_Y
 
 def strip_for(p):
     """(key, PIL image) of the 128-frame strip for a cell of this kind; the key names a shared file."""
-    ident = json.dumps([p.display, p.count, p.icons, p.values if p.display != "numeric" and p.display != "bipolar" else None,
+    ident = json.dumps([p.label if p.fmt else None, p.display, p.count, p.icons, p.values if p.display != "numeric" and p.display != "bipolar" else None,
                         p.display if p.display in ("numeric", "bipolar") else None])
     return ident
 
@@ -358,7 +364,7 @@ else:
 
 def page_origin(name):
     col, row = PAGE_POS[name]
-    return OX + PAGES_X0 + col * (LCD_W * S + PAGE_GAP), OY + TOP + row * (PAGE_LCD_H * S + PAGE_GAP)    # skin px of the title bar's top-left
+    return OX + PAGES_X0 + col * (LCD_W * S + PAGE_GAP), OY + TOP + row * (PAGE_LCD_H * S + ROW_GAP)    # skin px of the title bar's top-left
 
 
 def draw_tab(cv, x, w, bar_y, active):
@@ -614,10 +620,32 @@ for _n in (("LFO23",) if TABS else ("LFO2", "LFO3")):
 default_machine = next(m for m in MACHINES if m["index"] == 4)
 PAGE_CELLS["SYN"] = syn_params(default_machine)
 for name, cells in PAGE_CELLS.items():
+    if name == "GLOBAL":
+        continue
     cv, oy = page_canvas(name, cells)
     x, y = page_origin(name)
     bgs[TAB_OF[name]].paste(cv.image(), (x, y - oy * S))
-if GRID or LEVQ:   # the GLOBAL quadrant: a title bar and a dotted body, like the pages
+def blank_p():
+    return P({"label": "", "display": 0, "tieRight": 0, "default": 0, "max": 127, "count": 128, "icons": 0, "values": None})
+
+
+def extra_p(label, display, default, count=128, icons=0, values=None, fmt=None):
+    q = P({"label": label, "display": display, "tieRight": 0, "default": default, "max": 127, "count": count, "icons": icons, "values": values})
+    q.fmt = fmt
+    return q
+
+
+# the extra global controls (not in upstream's One editor): master tune in Hz (the emulator supports 400..440), LPF/HPF key tracking
+GLOBAL_CELLS = [blank_p(), extra_p("TUNE", 1, 127, fmt=lambda raw: str(int(round(400 + raw * 40 / 127.0)))),
+                extra_p("LPF KEY", 3, 127, 2, 1, ["OFF", "ON"]), extra_p("HPF KEY", 3, 127, 2, 1, ["OFF", "ON"])] + [blank_p() for _ in range(4)]
+if LEVQ:
+    PAGE_CELLS["GLOBAL"] = GLOBAL_CELLS
+for name, cells in PAGE_CELLS.items():
+    if name == "GLOBAL":
+        cv, oy = page_canvas(name, cells)
+        gx_, gy_ = page_origin(name)
+        bgs[TAB_OF[name]].paste(cv.image(), (gx_, gy_))
+if GRID:   # the GLOBAL quadrant: a title bar and a dotted body, like the pages
     gcv = Canvas(LCD_W, PAGE_LCD_H)
     gcv.fill(0, 0, LCD_W, TITLE_H, True)
     gcv.text(F["bold8"], "GLOBAL", 2, 1, False)
@@ -666,6 +694,8 @@ def arrow_h(cv, cx, cy, left, on):
 STRIP_H = 15
 if GRID:
     strip_x, strip_w = _gx, LCD_W
+elif LAYOUT == "2x2":   # aligned with the right-hand page
+    strip_x, strip_w = OX + PAGES_X0 + LCD_W * S + PAGE_GAP, LCD_W
 else:
     strip_x = OX + BAR_X_W + BAR_W_MAX + 12
     strip_w = min((OX + WIN_W - MARG - strip_x) // S, 190)
@@ -765,22 +795,23 @@ if TABS:
 
 
 if LEVQ:
-    # LEV as upstream's column (label, dotted frame, solid bar), standing in the GLOBAL quadrant's body
+    # GLOBAL quadrant: LEV as upstream's column (label, dotted frame, solid bar) filling the first cell column, then the extra globals
     qx, qy = page_origin("GLOBAL")
-    body_y = GRID_Y + 1                                       # first row under the body's top edge
-    lv = Canvas(19, PAGE_LCD_H - body_y)
-    lv.text_centred(F["bold8"], "LEV", 0, 19, 0)
-    fy_ = 10
-    rows_ = PAGE_LCD_H - body_y
-    lv.dots_h(0, 18, fy_); lv.dots_h(0, 18, rows_ - 1); lv.dots_v(0, fy_, rows_ - 1); lv.dots_v(18, fy_, rows_ - 1)
-    lev_x, lev_y = qx + 6 * S, qy + body_y * S
+    body_y = GRID_Y                                            # the cell grid's first row inside the page
+    col_rows = 2 * CELL
+    lv = Canvas(CW, col_rows)
+    lv.dots_h(0, CW - 1, 0); lv.dots_v(0, 0, col_rows - 1)     # the column's own top/left borders (the page's bottom edge is drawn by the page)
+    lv.text_centred(F["bold8"], "LEV", 0, CW, 1)
+    fx_, fy_, fw_l, fh_l = (CW - 19) // 2, 10, 19, col_rows - 11
+    lv.dots_h(fx_, fx_ + fw_l - 1, fy_); lv.dots_h(fx_, fx_ + fw_l - 1, fy_ + fh_l - 1)
+    lv.dots_v(fx_, fy_, fy_ + fh_l - 1); lv.dots_v(fx_ + fw_l - 1, fy_, fy_ + fh_l - 1)
+    bgs[TAB_OF["GLOBAL"]].paste(lv.image(), (qx, qy + body_y * S))
     for t_ in range(NTABS):
-        if t_ == TAB_OF["GLOBAL"]:
-            bgs[t_].paste(lv.image(), (lev_x, lev_y))
         save_png("bg_%d" % t_, bgs[t_])
+    lev_x, lev_y = qx + (fx_ + 1) * S, qy + body_y * S
     inner_y0 = fy_ + 2
     seg_n = 2
-    seg_h = (rows_ - 1 - inner_y0 - 1) // seg_n
+    seg_h = (fh_l - 4) // seg_n
     inner_h = seg_h * seg_n
     for sgm in range(seg_n):
         frames = []
@@ -797,8 +828,23 @@ if LEVQ:
             st.paste(f_, (0, i_ * seg_h * S))
         fn = save_png("lev_%d" % sgm, st)
         kd = knob_def(fn, 17 * S, seg_h * S)
-        place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x + S, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S,
+        place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S,
               focus="Yes" if sgm == 0 else "No", img=fn, raw=100, tab=TAB_OF["GLOBAL"])
+    # master tune: a dial cell (its value row shows Hz); LPF/HPF key tracking: two-state buttons drawn as the LCD's toggle cells
+    cell_knobs("GLOBAL", GLOBAL_CELLS, ["level", "master_tune", "lpf_key", "hpf_key", "level", "level", "level", "level"])
+    for k_, key_p in ((2, "lpf_key"), (3, "hpf_key")):
+        p_ = GLOBAL_CELLS[k_]
+        imgs = {}
+        for state, raw in (("on", 127), ("off", 0)):
+            cv = Canvas(FR_W, FR_H)
+            cell_dynamic(cv, -FR_X, -FR_Y, p_, raw)
+            imgs[state] = save_png("tog_%s_%s" % (key_p, state), cv.image())
+        w_, h_ = FR_W * S, FR_H * S
+        key = "mnmToggle_%s" % key_p
+        defs[key] = ss._local(key, [ss._action("Mouse Down", "Q-Link"), ss._action("Enter Pressed", "Toggle Switch")],
+                              [ss._focus(w_, h_), ss._button(imgs["on"], imgs["off"], 1, 1, w_, h_)])
+        place(key, p_.label, PIDX[key_p], qx + ((k_ % 4) * CW + FR_X) * S, qy + (GRID_Y + (k_ // 4) * CELL + FR_Y) * S, w_, h_,
+              focus="Yes", tab=TAB_OF["GLOBAL"], img=imgs["on"])
 elif not GRID:
     # LEV, horizontal under the preset strip (upstream's LEV column turned on its side): "LEV", a dotted frame, a solid level bar
     LEV_ROWS = BAR_ROWS - STRIP_H - 1       # 10: the strip + LEV are as tall as the machine block
@@ -951,7 +997,7 @@ if TABS:
         ("SYN / AMP", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)])]),
         ("FILT / EFX", [("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
-                 ("LFO3 / MIX", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"])]),
+                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine", "master_tune", "lpf_key", "hpf_key"])]),
     ]
 elif GRID:
     TAB_SETS = [
@@ -965,7 +1011,7 @@ else:
         ("SYN / AMP / FILT / EFX", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)]),
                                     ("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
-                 ("LFO3 / MIX", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"])]),
+                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine", "master_tune", "lpf_key", "hpf_key"])]),
     ]
 pages, qmap = [], []
 comp_bg = {"version": 1, "colour": "ff%02x%02x%02x" % PAPER, "image": ""}
