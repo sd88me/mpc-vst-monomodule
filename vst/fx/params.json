@@ -1,0 +1,688 @@
+{
+ "name": "Monomodule FX",
+ "params": [
+  {
+   "key": "machine",
+   "name": "Machine",
+   "options": [
+    "THRU",
+    "REVERB",
+    "CHORUS",
+    "DYNAMIX",
+    "RINGMOD",
+    "PHASER",
+    "FLANGER"
+   ],
+   "default": 1
+  },
+  {
+   "key": "level",
+   "name": "Level",
+   "min": 0,
+   "max": 127,
+   "default": 100,
+   "display": "int"
+  },
+  {
+   "key": "syn0",
+   "name": "SYN A",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "syn1",
+   "name": "SYN B",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "syn2",
+   "name": "SYN C",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "syn3",
+   "name": "SYN D",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "syn4",
+   "name": "SYN E",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "syn5",
+   "name": "SYN F",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "syn6",
+   "name": "SYN G",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "syn7",
+   "name": "SYN H",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "amp0",
+   "name": "AMP ATK",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "amp1",
+   "name": "AMP HOLD",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "amp2",
+   "name": "AMP DEC",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int"
+  },
+  {
+   "key": "amp3",
+   "name": "AMP REL",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int"
+  },
+  {
+   "key": "amp4",
+   "name": "AMP DIST",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "amp5",
+   "name": "AMP VOL",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "amp6",
+   "name": "AMP PAN",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "amp7",
+   "name": "AMP PORT",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "filt0",
+   "name": "FILT BASE",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "filt1",
+   "name": "FILT WDTH",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int"
+  },
+  {
+   "key": "filt2",
+   "name": "FILT HPQ",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "filt3",
+   "name": "FILT LPQ",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "filt4",
+   "name": "FILT ATK",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "filt5",
+   "name": "FILT DEC",
+   "min": 0,
+   "max": 127,
+   "default": 32,
+   "display": "int"
+  },
+  {
+   "key": "filt6",
+   "name": "FILT BOFS",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "filt7",
+   "name": "FILT WOFS",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "efx0",
+   "name": "EFX EQF",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "efx1",
+   "name": "EFX EQG",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "efx2",
+   "name": "EFX SRR",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "efx3",
+   "name": "EFX DTIM",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "efx4",
+   "name": "EFX DSND",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "efx5",
+   "name": "EFX DFB",
+   "min": 0,
+   "max": 127,
+   "default": 28,
+   "display": "int"
+  },
+  {
+   "key": "efx6",
+   "name": "EFX DBAS",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "efx7",
+   "name": "EFX DWID",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_0",
+   "name": "LFO1 1",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_1",
+   "name": "LFO1 2",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_2",
+   "name": "LFO1 3",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_3",
+   "name": "LFO1 4",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_4",
+   "name": "LFO1 5",
+   "min": 0,
+   "max": 127,
+   "default": 1,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_5",
+   "name": "LFO1 6",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_6",
+   "name": "LFO1 7",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo1_7",
+   "name": "LFO1 8",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_0",
+   "name": "LFO2 1",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_1",
+   "name": "LFO2 2",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_2",
+   "name": "LFO2 3",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_3",
+   "name": "LFO2 4",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_4",
+   "name": "LFO2 5",
+   "min": 0,
+   "max": 127,
+   "default": 1,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_5",
+   "name": "LFO2 6",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_6",
+   "name": "LFO2 7",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo2_7",
+   "name": "LFO2 8",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_0",
+   "name": "LFO3 1",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_1",
+   "name": "LFO3 2",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_2",
+   "name": "LFO3 3",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_3",
+   "name": "LFO3 4",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_4",
+   "name": "LFO3 5",
+   "min": 0,
+   "max": 127,
+   "default": 1,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_5",
+   "name": "LFO3 6",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_6",
+   "name": "LFO3 7",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "lfo3_7",
+   "name": "LFO3 8",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int"
+  },
+  {
+   "key": "machine__open",
+   "name": "Machine List",
+   "options": [
+    "Closed",
+    "Open"
+   ],
+   "default": 0,
+   "popup_of": "machine"
+  },
+  {
+   "key": "lfo1_pagesel",
+   "name": "LFO1 Page",
+   "options": [
+    "PTCH",
+    "SYNT",
+    "AMP",
+    "FILT",
+    "EFFX",
+    "LFO1",
+    "LFO2",
+    "LFO3",
+    "MIDI"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo2_pagesel",
+   "name": "LFO2 Page",
+   "options": [
+    "PTCH",
+    "SYNT",
+    "AMP",
+    "FILT",
+    "EFFX",
+    "LFO1",
+    "LFO2",
+    "LFO3",
+    "MIDI"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo3_pagesel",
+   "name": "LFO3 Page",
+   "options": [
+    "PTCH",
+    "SYNT",
+    "AMP",
+    "FILT",
+    "EFFX",
+    "LFO1",
+    "LFO2",
+    "LFO3",
+    "MIDI"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo23tab",
+   "name": "LFO Tab",
+   "options": [
+    "LFO2",
+    "LFO3"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo23dest",
+   "name": "LFO2/3 Dest View",
+   "options": [
+    "LFO2 PTCH",
+    "LFO2 SYNT",
+    "LFO2 AMP",
+    "LFO2 FILT",
+    "LFO2 EFFX",
+    "LFO2 LFO1",
+    "LFO2 LFO2",
+    "LFO2 LFO3",
+    "LFO2 MIDI",
+    "LFO3 PTCH",
+    "LFO3 SYNT",
+    "LFO3 AMP",
+    "LFO3 FILT",
+    "LFO3 EFFX",
+    "LFO3 LFO1",
+    "LFO3 LFO2",
+    "LFO3 LFO3",
+    "LFO3 MIDI"
+   ],
+   "default": 0
+  },
+  {
+   "key": "preset_prev",
+   "name": "Preset Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "preset_next",
+   "name": "Preset Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "preset_name",
+   "name": "Preset",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  }
+ ],
+ "sections": [
+  {
+   "label": "MACHINE",
+   "keys": [
+    "machine",
+    "level"
+   ]
+  },
+  {
+   "label": "SYN",
+   "keys": [
+    "syn0",
+    "syn1",
+    "syn2",
+    "syn3",
+    "syn4",
+    "syn5",
+    "syn6",
+    "syn7"
+   ]
+  },
+  {
+   "label": "AMP",
+   "keys": [
+    "amp0",
+    "amp1",
+    "amp2",
+    "amp3",
+    "amp4",
+    "amp5",
+    "amp6",
+    "amp7"
+   ]
+  },
+  {
+   "label": "FILT",
+   "keys": [
+    "filt0",
+    "filt1",
+    "filt2",
+    "filt3",
+    "filt4",
+    "filt5",
+    "filt6",
+    "filt7"
+   ]
+  },
+  {
+   "label": "EFX",
+   "keys": [
+    "efx0",
+    "efx1",
+    "efx2",
+    "efx3",
+    "efx4",
+    "efx5",
+    "efx6",
+    "efx7"
+   ]
+  },
+  {
+   "label": "LFO1",
+   "keys": [
+    "lfo1_0",
+    "lfo1_1",
+    "lfo1_2",
+    "lfo1_3",
+    "lfo1_4",
+    "lfo1_5",
+    "lfo1_6",
+    "lfo1_7"
+   ]
+  },
+  {
+   "label": "LFO2",
+   "keys": [
+    "lfo2_0",
+    "lfo2_1",
+    "lfo2_2",
+    "lfo2_3",
+    "lfo2_4",
+    "lfo2_5",
+    "lfo2_6",
+    "lfo2_7"
+   ]
+  },
+  {
+   "label": "LFO3",
+   "keys": [
+    "lfo3_0",
+    "lfo3_1",
+    "lfo3_2",
+    "lfo3_3",
+    "lfo3_4",
+    "lfo3_5",
+    "lfo3_6",
+    "lfo3_7"
+   ]
+  }
+ ]
+}

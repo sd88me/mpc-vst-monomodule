@@ -52,16 +52,23 @@ int main(int argc, char** argv)
         printf("idle 6 s: dsp-thread cpu %.1f%% parked=%s\n", 100.0 * (dspCpuSeconds() - c0) / std::chrono::duration<double>(Clock::now() - ti).count(), buf);
     }
     e->get_param(in, "core", buf, sizeof buf); printf("core %s\n", buf);
-    e->midi(in, on, 3);
+    const bool fx = e->process != nullptr;   // an effect: feed noise for the first three quarters, then silence (tail)
+    if (!fx) e->midi(in, on, 3);
     const double cpu0 = dspCpuSeconds(); const auto t1 = Clock::now();
     auto next = t1;
     const int blocks = secs * 44100 / 128;
     for (int b = 0; b < blocks; ++b) {
         next += std::chrono::nanoseconds(int64_t(128.0 / 44100.0 * 1e9));
         std::this_thread::sleep_until(next);
-        e->render(in, out, 128);
+        if (fx) {
+            static int16_t src[128 * 2];
+            for (int i = 0; i < 256; ++i) src[i] = b < blocks * 3 / 4 ? int16_t((rand() % 16000) - 8000) : 0;
+            e->process(in, src, out, 128);
+        } else {
+            e->render(in, out, 128);
+        }
         for (int i = 0; i < 256; ++i) { int v = out[i] < 0 ? -out[i] : out[i]; if (v > peak) peak = v; }
-        if (b == blocks * 3 / 4) e->midi(in, off, 3);
+        if (!fx && b == blocks * 3 / 4) e->midi(in, off, 3);
     }
     const double wall = std::chrono::duration<double>(Clock::now() - t1).count();
     e->get_param(in, "underruns", buf, sizeof buf);

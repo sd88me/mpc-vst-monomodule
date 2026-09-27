@@ -254,7 +254,8 @@ def strip_for(p):
 
 
 # ------------------------------------------------------------------ output ----------------------------------------
-NAME = "Monomodule One"
+FXV = args.get("fx") == "1"      # Monomodule FX: the FX machines, no notes-related globals
+NAME = "Monomodule FX" if FXV else "Monomodule One"
 VENDOR = "shnolk"
 OUT = os.path.join(sys.argv[3], "%s - VST - %s" % (VENDOR, NAME))
 SKIN = os.path.join(OUT, "Plugin Skins")
@@ -501,13 +502,15 @@ def draw_logo(im, x, y, w, h, colour, group_scale=4):
 
 
 # ------------------------------------------------------------------ machines -----------------------------------------
-MACHINES = [m for m in SPEC["machines"] if not m["isFx"]]     # One: the synth machines, in menu order (= the engine's list)
+MACHINES = [m for m in SPEC["machines"] if bool(m["isFx"]) == FXV]     # One: the synth machines, in menu order (= the engine's list)
 GROUP_TEXT = {"GND": ("GND", "BASE-LEVEL SOUNDS"), "SID": ("SID", "COMMODORE 64 SOUND EMULATION. CRISP / GRITTY SOUND."),
               "SWAVE": ("SUPERWAVE", "STACKED ANALOG OSCILLATORS. THICK, WARM SOUND."),
               "DPRO": ("DIGIPRO", "RAW DIGITAL WAVEFORMS W/ SAMPLER. HARSH AND SHARP SOUND."),
               "FM+": ("FM+", "COMPLEX FREQUENCY MODULATION SYNTHESIS MADE SIMPLE."),
-              "VO": ("VO", "FORMANT VOICE SYNTHESIS: VOWELS, CONSONANTS, WHISPER.")}
-MACHINE_BLURB = {0: "EMPTY CHANNEL", 1: "SINE WAVE", 2: "WHITE NOISE", 3: "C64 SOUND CHIP", 4: "UNISON SAWTOOTH", 5: "UNISON PULSE",
+              "VO": ("VO", "FORMANT VOICE SYNTHESIS: VOWELS, CONSONANTS, WHISPER."),
+              "FX": ("FX", "AUDIO EFFECTS, REQUIRES AN AUDIO INPUT.")}
+MACHINE_BLURB = {12: "PASS-THROUGH", 13: "GATED REVERB", 15: "STEREO CHORUS", 16: "COMPRESSOR", 17: "RING MODULATOR", 18: "PHASER", 19: "FLANGER",
+                 0: "EMPTY CHANNEL", 1: "SINE WAVE", 2: "WHITE NOISE", 3: "C64 SOUND CHIP", 4: "UNISON SAWTOOTH", 5: "UNISON PULSE",
                  14: "STRING ENSEMBLE", 6: "32 WAVEFORMS", 7: "DRUM SAMPLES", 32: "USER WAVES", 33: "WAVE ENSEMBLE",
                  8: "STATIC RATIOS", 9: "PARALLEL MODS", 10: "DYNAMIC FM", 11: "FORMANT VOICE"}
 
@@ -591,7 +594,7 @@ def machine_bar(m):
     return im
 
 
-PREVIEW_MACHINE = int(args.get("machine", "4"))
+PREVIEW_MACHINE = int(args.get("machine", "1" if FXV else "4"))
 # ------------------------------------------------------------------ build --------------------------------------------
 def shared_params(i):
     return [P(d) for d in SPEC["shared"][i]["params"]]
@@ -617,7 +620,7 @@ for b_ in bgs:
 PAGE_CELLS = {"AMP": shared_params(0), "FILT": shared_params(1), "EFX": shared_params(2), "LFO1": lfo_params()}
 for _n in (("LFO23",) if TABS else ("LFO2", "LFO3")):
     PAGE_CELLS[_n] = lfo_params()
-default_machine = next(m for m in MACHINES if m["index"] == 4)
+default_machine = next(m for m in MACHINES if m["index"] == (13 if FXV else 4))
 PAGE_CELLS["SYN"] = syn_params(default_machine)
 for name, cells in PAGE_CELLS.items():
     if name == "GLOBAL":
@@ -636,8 +639,8 @@ def extra_p(label, display, default, count=128, icons=0, values=None, fmt=None):
 
 
 # the extra global controls (not in upstream's One editor): master tune in Hz (the emulator supports 400..440), LPF/HPF key tracking
-GLOBAL_CELLS = [blank_p(), extra_p("TUNE", 1, 127, fmt=lambda raw: str(int(round(400 + raw * 40 / 127.0)))),
-                extra_p("LPF KEY", 3, 127, 2, 1, ["OFF", "ON"]), extra_p("HPF KEY", 3, 127, 2, 1, ["OFF", "ON"])] + [blank_p() for _ in range(4)]
+GLOBAL_CELLS = [blank_p()] + ([blank_p() for _ in range(7)] if FXV else [extra_p("TUNE", 1, 127, fmt=lambda raw: str(int(round(400 + raw * 40 / 127.0)))),
+                extra_p("LPF KEY", 3, 127, 2, 1, ["OFF", "ON"]), extra_p("HPF KEY", 3, 127, 2, 1, ["OFF", "ON"])] + [blank_p() for _ in range(4)])
 if LEVQ:
     PAGE_CELLS["GLOBAL"] = GLOBAL_CELLS
 for name, cells in PAGE_CELLS.items():
@@ -831,8 +834,9 @@ if LEVQ:
         place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S,
               focus="Yes" if sgm == 0 else "No", img=fn, raw=100, tab=TAB_OF["GLOBAL"])
     # master tune: a dial cell (its value row shows Hz); LPF/HPF key tracking: two-state buttons drawn as the LCD's toggle cells
-    cell_knobs("GLOBAL", GLOBAL_CELLS, ["level", "master_tune", "lpf_key", "hpf_key", "level", "level", "level", "level"])
-    for k_, key_p in ((2, "lpf_key"), (3, "hpf_key")):
+    if not FXV:
+        cell_knobs("GLOBAL", GLOBAL_CELLS, ["level", "master_tune", "lpf_key", "hpf_key", "level", "level", "level", "level"])
+    for k_, key_p in (() if FXV else ((2, "lpf_key"), (3, "hpf_key"))):
         p_ = GLOBAL_CELLS[k_]
         imgs = {}
         for state, raw in (("on", 127), ("off", 0)):
@@ -910,6 +914,8 @@ else:
 
 # machine picker: field over the machine bar toggles machine__open; panel + one image button per machine
 pk_x, pk_y, pk_w, pk_h = OX + PAGES_X0, OY + TOP - TAB_OVERHANG * S, PAGES_W, 340
+if FXV:   # one column (the FX group), as wide as one of the seven columns of the full picker, tall enough for its 7 machines
+    pk_w, pk_h = (PAGES_W - 6 * 6) // 7 + 20, 468
 groups = []
 for mi, m in enumerate(MACHINES):
     if not groups or groups[-1]["group"] != m["group"]:
@@ -997,7 +1003,7 @@ if TABS:
         ("SYN / AMP", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)])]),
         ("FILT / EFX", [("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
-                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine", "master_tune", "lpf_key", "hpf_key"])]),
+                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"] + ([] if FXV else ["master_tune", "lpf_key", "hpf_key"]))]),
     ]
 elif GRID:
     TAB_SETS = [
@@ -1011,7 +1017,7 @@ else:
         ("SYN / AMP / FILT / EFX", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)]),
                                     ("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
-                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine", "master_tune", "lpf_key", "hpf_key"])]),
+                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"] + ([] if FXV else ["master_tune", "lpf_key", "hpf_key"]))]),
     ]
 pages, qmap = [], []
 comp_bg = {"version": 1, "colour": "ff%02x%02x%02x" % PAPER, "image": ""}

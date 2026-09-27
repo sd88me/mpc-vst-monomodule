@@ -11,5 +11,7 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$ROOT":/r -v "$(dirname "$OS")":/os:r
   vst/build/mnm-artdump /os/$(basename "$OS") vst/build/art.json"
 python3 "$MV/tools/gen_vst.py" "$HERE/vst.json" >/dev/null
 EXTRA="${@:3}"
+P=vst/params.json; O=vst/build/skin
+case " $EXTRA " in *" fx=1 "*) P=vst/fx/params.json; O=vst/fx/build/skin ;; esac
 docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e MPC_VST_TOOLS=/mv/tools -v "$ROOT":/r -v "$MV":/mv:ro -w /r python:3.11-slim sh -c \
-  "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 vst/skin/mk_skin.py vst/build/art.json vst/params.json vst/build/skin $EXTRA"
+  "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 vst/skin/mk_skin.py vst/build/art.json $P $O $EXTRA"

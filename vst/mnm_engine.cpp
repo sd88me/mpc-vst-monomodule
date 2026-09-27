@@ -1,4 +1,6 @@
 // mpc_engine() (mpc-vst-plugins wrapper/engine.h) for Monomodule One: one voice, one machine per instance.
+// Built twice: MNM_FX=0 -> Monomodule One (a synth: notes in, audio out); MNM_FX=1 -> Monomodule FX (the FX machines as an audio
+// effect on the host's audio: process() instead of render()).
 //
 // The emulated DSP runs on its own SCHED_FIFO thread and renders 128-frame blocks ahead of the host into a
 // small ring; render() (the host's audio callback) only copies a finished block out, or outputs silence when
@@ -36,6 +38,10 @@ extern "C" {
 #include "engine.h"
 }
 
+#ifndef MNM_FX
+#define MNM_FX 0
+#endif
+
 namespace {
 
 using namespace mnm;
@@ -43,12 +49,21 @@ using namespace mnm;
 constexpr int kFrames = 128;
 constexpr int kRing = 4;           // blocks
 constexpr int kAhead = 2;          // blocks the DSP thread keeps rendered ahead
+constexpr int kDepth = 2;          // FX: blocks of latency between the host's input and the output it reads
+#if MNM_FX
+constexpr int kNumMachines = 7;
+constexpr int kDefaultMachine = 1;   // REVERB
+constexpr host::Machine kMachines[kNumMachines] = {host::Machine::THRU, host::Machine::REVERB, host::Machine::CHORUS,
+    host::Machine::DYNAMIX, host::Machine::RINGMOD, host::Machine::PHASER, host::Machine::FLANGER};
+#else
 constexpr int kNumMachines = 15;
+constexpr int kDefaultMachine = 4;   // SWAVE SAW, as upstream One
 constexpr host::Machine kMachines[kNumMachines] = {
     host::Machine::GND, host::Machine::SIN, host::Machine::NOIS, host::Machine::SID, host::Machine::SAW,
     host::Machine::PULS, host::Machine::ENS,
     host::Machine::WAVE, host::Machine::BBOX, host::Machine::DDRW, host::Machine::DENS,
     host::Machine::FM_STAT, host::Machine::FM_PAR, host::Machine::FM_DYN, host::Machine::VO6};
+#endif
 
 // parameter slots: 0 machine, 1 level, 2.. = 4 pages x 8, then 3 LFOs x 8
 constexpr int kSlotMachine = 0, kSlotLevel = 1, kSlotPages = 2, kSlotLfo = 34, kSlotTab = 58, kSlotTune = 59, kSlotLpk = 60, kSlotHpk = 61, kNumSlots = 62;
@@ -82,7 +97,7 @@ void defaultsFor(int machineSlot, int* out /*[32] SYN AMP FILT EFX*/)
     const auto* d = host::machineDef(kMachines[machineSlot]);
     for (int k = 0; k < 8; ++k) {
         out[k] = d ? d->defaults[size_t(k)] : 0;
-        out[8 + k] = host::kDefaultAmp[size_t(k)];
+        out[8 + k] = MNM_FX ? host::kDefaultAmpFx[size_t(k)] : host::kDefaultAmp[size_t(k)];   // an FX track holds its envelope open
         out[16 + k] = host::kDefaultFilt[size_t(k)];
         out[24 + k] = host::kDefaultEfx[size_t(k)];
     }
@@ -164,7 +179,7 @@ Catalog* buildCatalog(const std::string& dir)
                 const auto& tr = kit.tracks[t];
                 bool ours = false;
                 for (auto m : kMachines) if (int(m) == tr.model) ours = true;
-                if (!ours || tr.model == int(host::Machine::GND)) continue;
+                if (!ours || (!MNM_FX && tr.model == int(host::Machine::GND))) continue;
                 std::string key(reinterpret_cast<const char*>(tr.params), 56);
                 key += char(tr.model); key += char(tr.level);
                 if (std::find(seen.begin(), seen.end(), key) != seen.end()) continue;
@@ -194,6 +209,8 @@ struct Inst {
     alignas(64) int16_t ring[kRing][kFrames * 2];
     std::atomic<uint32_t> rWrite{0}, rRead{0};
     std::thread th, catTh;
+    alignas(64) int16_t inRing[kRing][kFrames * 2];   // FX: host audio waiting for the DSP thread
+    std::atomic<uint32_t> inWrite{0}, inRead{0}, dropped{0};
     std::atomic<Catalog*> cat{nullptr};
     int presetIdx = 0;               // 0 = Init, k = the machine's k-th sound; control thread only
     int snap[kNumSlots] = {};        // the loaded preset's values (slots 1..57), to tell "modified"
@@ -204,7 +221,7 @@ struct Inst {
     Inst()
     {
         for (auto& p : param) p.store(0);
-        loadInit(4);   // SWAVE SAW, as upstream One
+        loadInit(kDefaultMachine);
         param[kSlotTune].store(440);
         param[kSlotLpk].store(1);   // the hardware's kit default: key tracking on
         param[kSlotHpk].store(1);
@@ -290,6 +307,10 @@ void Inst::run()
         firmware = loadFw(osPath);
         voice = std::make_unique<MonoVoice>(*firmware);
         voice->host().setMachine(kMachines[param[kSlotMachine].load()]);
+#if MNM_FX
+        voice->host().setRouting(host::dspInputBits(host::FxInput::InpAB));
+        voice->host().noteOn(60);   // an FX machine runs with its envelope open, as upstream does
+#endif
         voice->warmUp(8);
     } catch (const std::exception& ex) {
         std::fprintf(stderr, "[monomodule] engine failed: %s\n", ex.what());
@@ -311,21 +332,42 @@ void Inst::run()
     uint32_t silentBlocks = 0;
     constexpr uint32_t kParkAfter = 44100 * 2 / kFrames;   // 2 s of exact silence with no note held
     std::vector<float> L(kFrames), R(kFrames);
+#if MNM_FX
+    {   // hand the host its two blocks of latency now, so its one-block-per-call reads never wait on the DSP thread
+        const uint32_t w0 = rWrite.load(std::memory_order_relaxed);
+        for (int i = 0; i < kDepth; ++i) std::memset(ring[(w0 + uint32_t(i)) % kRing], 0, sizeof ring[0]);
+        rWrite.store(w0 + kDepth, std::memory_order_release);
+    }
+#endif
     ready.store(true);
 
     while (!stop.load(std::memory_order_acquire)) {
         const uint32_t w = rWrite.load(std::memory_order_relaxed);
+#if MNM_FX
+        // an effect can only work on audio that has arrived: one input block in, one output block out
+        if (int32_t(inWrite.load(std::memory_order_acquire) - inRead.load(std::memory_order_relaxed)) <= 0) {
+            struct timespec ts{0, 300000};
+            nanosleep(&ts, nullptr);
+            continue;
+        }
+#else
         if (int32_t(w - rRead.load(std::memory_order_acquire)) >= kAhead) {
             struct timespec ts{0, 400000};
             nanosleep(&ts, nullptr);
             continue;
         }
+#endif
         // machine first: it loads that machine's page defaults, which the shadow already holds
         const int ms = std::clamp(param[kSlotMachine].load(std::memory_order_relaxed), 0, kNumMachines - 1);
         if (ms != machineSlot) {
             machineSlot = ms;
             h.setMachine(kMachines[ms]);
+#if MNM_FX
+            h.setRouting(host::dspInputBits(host::FxInput::InpAB));
+            h.noteOn(60);
+#else
             if (nHeld == 0) { h.noteOff(); muted = true; }   // the assign's init must not sound
+#endif
             for (int i = 0; i < 32; ++i) applied[kSlotPages + i] = h.param(host::Page(i / 8), i % 8);
         }
         for (int i = 0; i < 32; ++i) {
@@ -345,6 +387,7 @@ void Inst::run()
         const int lv = std::clamp(param[kSlotLevel].load(std::memory_order_relaxed), 0, 127);
         if (lv != applied[kSlotLevel]) { applied[kSlotLevel] = lv; h.setLevel(lv); }
 
+#if !MNM_FX
         uint32_t r = nRead.load(std::memory_order_relaxed);
         const uint32_t nw = nWrite.load(std::memory_order_acquire);
         for (; r != nw; ++r) {
@@ -366,8 +409,38 @@ void Inst::run()
             } else { nHeld = 0; h.noteOff(); }
         }
         nRead.store(r, std::memory_order_release);
+#endif
 
         int16_t* out = ring[w % kRing];
+#if MNM_FX
+        {
+            const uint32_t ir = inRead.load(std::memory_order_relaxed);
+            const int16_t* in_ = inRing[ir % kRing];
+            bool inSilent = true;
+            for (int i = 0; i < kFrames * 2; ++i) if (in_[i]) { inSilent = false; break; }
+            if (parked && !inSilent) { parked = false; silentBlocks = 0; }
+            if (parked) {   // idle: advance the host model only; the tail was silent for 2 s
+                voice->skip(kFrames);
+                std::memset(out, 0, sizeof(int16_t) * kFrames * 2);
+            } else {
+                for (int i = 0; i < kFrames; ++i) { L[size_t(i)] = float(in_[2 * i]) * (1.f / 32768.f); R[size_t(i)] = float(in_[2 * i + 1]) * (1.f / 32768.f); }
+                std::vector<float> oL(kFrames), oR(kFrames);
+                voice->processFx(L.data(), R.data(), oL.data(), oR.data(), kFrames);
+                bool silent = inSilent;
+                for (int i = 0; i < kFrames; ++i) {
+                    out[2 * i] = int16_t(std::lrint(std::clamp(oL[size_t(i)], -1.f, 1.f) * 32767.f));
+                    out[2 * i + 1] = int16_t(std::lrint(std::clamp(oR[size_t(i)], -1.f, 1.f) * 32767.f));
+                    if (out[2 * i] || out[2 * i + 1]) silent = false;
+                }
+                if (silent) { if (++silentBlocks >= kParkAfter) parked = true; } else silentBlocks = 0;
+            }
+            inRead.store(ir + 1, std::memory_order_release);
+            rWrite.store(w + 1, std::memory_order_release);
+            blocks.fetch_add(1, std::memory_order_relaxed);
+            if (voice->engine().faulted()) { std::fprintf(stderr, "[monomodule] DSP fault: %s\n", voice->engine().faultReason().c_str()); return; }
+            continue;
+        }
+#endif
         if (parked) {   // idle: advance the host model only (the DSP's free-running state stops where it was)
             voice->skip(kFrames);
             std::memset(out, 0, sizeof(int16_t) * kFrames * 2);
@@ -491,7 +564,29 @@ void eRender(void* p, int16_t* out, int frames)
     }
 }
 
-const mpc_engine_t kEngine = {eCreate, eDestroy, eMidi, eSet, eGet, eRender};
+// FX: the host's audio goes into a small ring; the DSP thread works through it and the host reads finished blocks back
+void eProcess(void* p, const int16_t* inp, int16_t* out, int frames)
+{
+    auto* in = static_cast<Inst*>(p);
+    if (frames != kFrames) { std::memset(out, 0, sizeof(int16_t) * size_t(frames) * 2); return; }
+    const uint32_t w = in->inWrite.load(std::memory_order_relaxed);
+    if (int32_t(w - in->inRead.load(std::memory_order_acquire)) < kRing) {
+        std::memcpy(in->inRing[w % kRing], inp, sizeof(int16_t) * kFrames * 2);
+        in->inWrite.store(w + 1, std::memory_order_release);
+    } else {
+        in->dropped.fetch_add(1, std::memory_order_relaxed);
+    }
+    const uint32_t r = in->rRead.load(std::memory_order_relaxed);
+    if (int32_t(in->rWrite.load(std::memory_order_acquire) - r) > 0) {
+        std::memcpy(out, in->ring[r % kRing], sizeof(int16_t) * kFrames * 2);
+        in->rRead.store(r + 1, std::memory_order_release);
+    } else {
+        std::memset(out, 0, sizeof(int16_t) * kFrames * 2);
+        if (in->ready.load(std::memory_order_relaxed)) in->underruns.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+const mpc_engine_t kEngine = {eCreate, eDestroy, eMidi, eSet, eGet, eRender, MNM_FX ? eProcess : nullptr};
 
 } // namespace
 

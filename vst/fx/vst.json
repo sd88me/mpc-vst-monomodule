@@ -1,0 +1,7 @@
+{
+  "name": "Monomodule FX", "vendor": "shnolk", "uid": "MnmF", "version": 1000,
+  "so": "monomodule_fx.so",
+  "params": "params.json", "custom_skin": true, "effect": true,
+  "defines": {"MODULE_DIR": "\"/sdcard/vst/monomodule\""},
+  "build": {"root": "..", "sources": [], "cflags": [], "libs": []}
+}

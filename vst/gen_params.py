@@ -2,17 +2,22 @@
 """Writes params.json for Monomodule One (VST index = order; append only, never reorder once shipped).
 Keys match mnm_engine.cpp. Every knob is a raw 0..127 kit byte, as in upstream One."""
 import json
+import os
+import sys
 
-MACHINES = ["GND", "GND SIN", "GND NOIS", "SID 6581", "SWAVE SAW", "SWAVE PULS", "SWAVE ENS", "DPRO WAVE",
-            "DPRO BBOX", "DPRO DDRW", "DPRO DENS", "FM+ STAT", "FM+ PAR", "FM+ DYN", "VO-6"]
+FX = "--fx" in sys.argv   # Monomodule FX: the FX machines only, no note-related globals; writes fx/params.json
+
+MACHINES = (["THRU", "REVERB", "CHORUS", "DYNAMIX", "RINGMOD", "PHASER", "FLANGER"] if FX else
+            ["GND", "GND SIN", "GND NOIS", "SID 6581", "SWAVE SAW", "SWAVE PULS", "SWAVE ENS", "DPRO WAVE",
+             "DPRO BBOX", "DPRO DDRW", "DPRO DENS", "FM+ STAT", "FM+ PAR", "FM+ DYN", "VO-6"])
 PAGES = [("syn", "SYN", ["A", "B", "C", "D", "E", "F", "G", "H"]),
          ("amp", "AMP", ["ATK", "HOLD", "DEC", "REL", "DIST", "VOL", "PAN", "PORT"]),
          ("filt", "FILT", ["BASE", "WDTH", "HPQ", "LPQ", "ATK", "DEC", "BOFS", "WOFS"]),
          ("efx", "EFX", ["EQF", "EQG", "SRR", "DTIM", "DSND", "DFB", "DBAS", "DWID"])]
-DEF = {"amp": [0, 0, 64, 64, 64, 64, 64, 0], "filt": [0, 127, 0, 0, 0, 32, 64, 64],
+DEF = {"amp": [0, 0, 127, 127, 64, 64, 64, 0] if FX else [0, 0, 64, 64, 64, 64, 64, 0], "filt": [0, 127, 0, 0, 0, 32, 64, 64],
        "efx": [64, 64, 0, 64, 64, 28, 0, 127], "syn": [0, 0, 0, 0, 0, 0, 0, 64]}
 
-params = [{"key": "machine", "name": "Machine", "options": MACHINES, "default": 4},
+params = [{"key": "machine", "name": "Machine", "options": MACHINES, "default": 1 if FX else 4},
           {"key": "level", "name": "Level", "min": 0, "max": 127, "default": 100, "display": "int"}]
 sections = [("MACHINE", ["machine", "level"])]
 for key, label, names in PAGES:
@@ -43,9 +48,12 @@ params.append({"key": "preset_prev", "name": "Preset Prev", "min": 0, "max": 1, 
 params.append({"key": "preset_next", "name": "Preset Next", "min": 0, "max": 1, "momentary": True})
 params.append({"key": "preset_name", "name": "Preset", "min": 0, "max": 0, "display": "string"})
 # globals (not part of a preset): master tune in Hz and the filter key tracking of the hardware's KIT > ASSIGN > KEY
-params.append({"key": "master_tune", "name": "Master Tune", "min": 400, "max": 440, "default": 440, "unit": "Hz", "display": "int"})
-params.append({"key": "lpf_key", "name": "LPF Key Track", "options": ["OFF", "ON"], "default": 1})
-params.append({"key": "hpf_key", "name": "HPF Key Track", "options": ["OFF", "ON"], "default": 1})
-json.dump({"name": "Monomodule One", "params": params,
-           "sections": [{"label": a, "keys": b} for a, b in sections]}, open("params.json", "w"), indent=1)
+if not FX:
+  params.append({"key": "master_tune", "name": "Master Tune", "min": 400, "max": 440, "default": 440, "unit": "Hz", "display": "int"})
+  params.append({"key": "lpf_key", "name": "LPF Key Track", "options": ["OFF", "ON"], "default": 1})
+  params.append({"key": "hpf_key", "name": "HPF Key Track", "options": ["OFF", "ON"], "default": 1})
+out = os.path.join("fx", "params.json") if FX else "params.json"
+os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+json.dump({"name": "Monomodule FX" if FX else "Monomodule One", "params": params,
+           "sections": [{"label": a, "keys": b} for a, b in sections]}, open(out, "w"), indent=1)
 print(len(params), "params")

@@ -194,6 +194,17 @@ checkpoint, not just at the end.
   Colour is a build option (a runtime colour control would multiply image memory; separate plugin-list entries per colour
   sharing the .so are an unverified alternative). Presets: kit `.syx` dumps in `/sdcard/vst/monomodule/dumps/`, scanned at insert.
 
+- **2026-09-27: Monomodule FX built (separate effect plugin), staged on the Force, NOT yet registered (needs MPC restart, ask the user).**
+  Same engine source built with `MNM_FX=1` (`monomodule_fx.so`): FX machines only (THRU, REVERB, CHORUS, DYNAMIX, RINGMOD, PHASER,
+  FLANGER; default REVERB; AMP defaults hold the envelope open), routing INP A+B, `process()` instead of `render()` (host audio
+  -> input ring -> DSP thread -> output ring, 2 blocks of latency plus the wrapper's own none for 128-frame calls), parks after 2 s
+  of silent in+out, no notes/tune/key-tracking. mpc-vst wrapper gained effect support (`engine.process`, vst.json `"effect": true`
+  -> 2 inputs, category Effect). Params 67 (`vst/fx/params.json`, `gen_params.py --fx`); skin `build_skin.sh <os.syx> <mpc-vst>
+  layout=2x2 fx=1` -> `vst/fx/build/skin` (single-column FX picker, LEV in GLOBAL). Smoke on the Force (noise in, paced): THRU 45%,
+  REVERB 70%, CHORUS 64%, DYNAMIX 50%, RINGMOD 64%, PHASER 54%, FLANGER 60% of the DSP thread's core, 0 underruns.
+  Plugin-list entry: `vst/fx/build/pluginlist-entry.xml` (category Effect, uid 4d6e6d46). Untested in MPC: effect insertion,
+  wrapper's aligned/unaligned block paths, latency feel.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
