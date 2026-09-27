@@ -47,9 +47,6 @@ params.append({"key": "lfo23dest", "name": "LFO2/3 Dest View", "options": ["%s %
 params.append({"key": "preset_prev", "name": "Preset Prev", "min": 0, "max": 1, "momentary": True})
 params.append({"key": "preset_next", "name": "Preset Next", "min": 0, "max": 1, "momentary": True})
 params.append({"key": "preset_name", "name": "Preset", "min": 0, "max": 0, "display": "string"})
-params.append({"key": "bank_prev", "name": "Bank Prev", "min": 0, "max": 1, "momentary": True})
-params.append({"key": "bank_next", "name": "Bank Next", "min": 0, "max": 1, "momentary": True})
-params.append({"key": "bank_name", "name": "Bank", "min": 0, "max": 0, "display": "string"})
 # globals (not part of a preset): master tune in Hz and the filter key tracking of the hardware's KIT > ASSIGN > KEY
 if not FX:
   # randomise (momentary; the wrapper springs it back to 0/OFF after firing -- see docs/PORTING.md's "step_of" note

@@ -593,27 +593,6 @@
    "display": "string"
   },
   {
-   "key": "bank_prev",
-   "name": "Bank Prev",
-   "min": 0,
-   "max": 1,
-   "momentary": true
-  },
-  {
-   "key": "bank_next",
-   "name": "Bank Next",
-   "min": 0,
-   "max": 1,
-   "momentary": true
-  },
-  {
-   "key": "bank_name",
-   "name": "Bank",
-   "min": 0,
-   "max": 0,
-   "display": "string"
-  },
-  {
    "key": "randomize_syn",
    "name": "Randomise SYN",
    "options": [

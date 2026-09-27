@@ -56,11 +56,7 @@ S = int(args.get("scale", "3" if LAYOUT == "2x2" else "4"))   # screen px per LC
 SKIN_W, SKIN_H = 1280, 628
 CELL, LABEL_Y, CONTENT_Y, CONTENT_H, VALUE_Y, VALUE_H = 32, 3, 9, 14, 23, 9
 TITLE_H, GRID_Y = 10, 11
-# BAR_ROWS: the header height (logo/machine block column). "tabs" stacks PRESET, BANK and (LEV, horizontal) in that
-# header, so it needs enough rows for all three; 2x2 and grid put LEV and the extra globals in their own quadrant/column
-# instead, so their header stays just tall enough for the machine block.
-MARG, GAPX, PAGE_GAP = 10, 8, (8 if GRID else 12)
-BAR_ROWS = (3 * 15 + 2 * 1 + 4) if TABS else 26
+MARG, GAPX, BAR_ROWS, PAGE_GAP = 10, 8, 26, (8 if GRID else 12)
 ROW_GAP = PAGE_GAP        # between the two rows of pages (PAGE_GAP, between the columns, may grow to share out spare width)
 # cell width in LCD px (upstream 32): wider cells use the whole width; the default fills the skin
 CW = int(args.get("cellw", "32" if GRID else "40" if LAYOUT == "2x2" else str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
@@ -715,56 +711,40 @@ else:
     strip_x = OX + BAR_X_W + BAR_W_MAX + 12
     strip_w = min((OX + WIN_W - MARG - strip_x) // S, 190)
 arrow_w = 12
-row_w = strip_w - 2 * (arrow_w - 1)
-
-
-def build_row(label, y, prev_key, next_key, name_key, tab):
-    """PREV / <label> / NEXT, with a live-text name field: upstream's PresetStrip minus the library parts,
-    generalised so BANK (below PRESET) can reuse it."""
-    prev_r, mid_r, next_r = (0, arrow_w), (arrow_w - 1, row_w), (arrow_w - 1 + row_w - 1, arrow_w)
-    row = Canvas(strip_w, STRIP_H)
-    for (rx, rw), left in ((prev_r, True), (next_r, False)):
-        frame_box(row, rx, 0, rw, STRIP_H)
-        arrow_h(row, rx + rw // 2, STRIP_H // 2, left, True)
-    frame_box(row, mid_r[0], 0, mid_r[1], STRIP_H)
-    row.text(F["tiny3x5"], label, mid_r[0] + 4, 5)
-    for r_ in range(3):   # caret, down
-        w_ = 5 - 2 * r_
-        row.fill(mid_r[0] + mid_r[1] - 9 + (5 - w_) // 2, 6 + r_, w_, 1)
-    row_img = row.image()
-    for t_, b_ in enumerate(bgs):
-        if GRID and t_ != 0:
-            continue
-        b_.paste(row_img, (strip_x, y))
-        save_png("bg_%d" % t_, b_)   # rewrite: the backgrounds were saved before this row existed
-    name_x_lcd = mid_r[0] + 4 + text_width(F["tiny3x5"], label) + 4
-    name_w_lcd = mid_r[0] + mid_r[1] - 10 - name_x_lcd
-    for key_, (rx, rw), left, pk in (("mnm%sPrev" % label, prev_r, True, prev_key), ("mnm%sNext" % label, next_r, False, next_key)):
-        off = row_img.crop((rx * S, 0, (rx + rw) * S, STRIP_H * S))
-        onc = Canvas(rw, STRIP_H)
-        onc.fill(0, 0, rw, STRIP_H, True)
-        arrow_h(onc, rw // 2, STRIP_H // 2, left, False)
-        fo, fn_ = save_png(key_ + "_off", off), save_png(key_ + "_on", onc.image())
-        defs[key_] = ss._local(key_, [ss._action("Mouse Down", "Q-Link"), ss._action("Enter Pressed", "Toggle Switch")],
-                               [ss._focus(rw * S, STRIP_H * S), ss._button(fn_, fo, 1, 1, rw * S, STRIP_H * S)])
-        place(key_, pk, PIDX[pk], strip_x + rx * S, y, rw * S, STRIP_H * S, focus="No", tab=tab)
-    nkey = "mnm%sName" % label
-    defs[nkey] = ss._local(nkey, [], [ss._value_label(0, 0, name_w_lcd * S, 11 * S, 30.0, "%02x%02x%02x" % INK, "left verticallyCentred")])
-    place(nkey, "%s name" % label, PIDX[name_key], strip_x + name_x_lcd * S, y + 2 * S, name_w_lcd * S, 11 * S, focus="No", tab=tab)
-
-
-STRIP_GAP = 1   # LCD rows between PRESET and BANK (distinct from ROW_GAP, the gap between page rows)
-if GRID:
-    preset_y, bank_y = _gy + (12 + BAR_ROWS + 3) * S, _gy + (12 + BAR_ROWS + 3 + STRIP_H + STRIP_GAP) * S
-elif TABS:
-    preset_y = OY + 8   # top-anchored, level with the logo/machine block: LEV (below) fills the rest of the header down to TOP
-    bank_y = preset_y + (STRIP_H + STRIP_GAP) * S
-else:
-    stack_h = (2 * STRIP_H + STRIP_GAP) * S
-    preset_y = OY + TOP - stack_h - 2 * S   # bottom-anchored just above the page title bars, whatever BAR_ROWS is
-    bank_y = preset_y + (STRIP_H + STRIP_GAP) * S
-build_row("PRESET", preset_y, "preset_prev", "preset_next", "preset_name", 0 if GRID else None)
-build_row("BANK", bank_y, "bank_prev", "bank_next", "bank_name", 0 if GRID else None)
+preset_w = strip_w - 2 * (arrow_w - 1)
+strip = Canvas(strip_w, STRIP_H)
+prev_r = (0, arrow_w)
+pre_r = (arrow_w - 1, preset_w)
+next_r = (arrow_w - 1 + preset_w - 1, arrow_w)
+for (rx, rw), left in ((prev_r, True), (next_r, False)):
+    frame_box(strip, rx, 0, rw, STRIP_H)
+    arrow_h(strip, rx + rw // 2, STRIP_H // 2, left, True)
+frame_box(strip, pre_r[0], 0, pre_r[1], STRIP_H)
+strip.text(F["tiny3x5"], "PRESET", pre_r[0] + 4, 5)
+for r_ in range(3):   # caret, down
+    w_ = 5 - 2 * r_
+    strip.fill(pre_r[0] + pre_r[1] - 9 + (5 - w_) // 2, 6 + r_, w_, 1)
+strip_img = strip.image()
+strip_y = _gy + (12 + BAR_ROWS + 3) * S if GRID else OY + 8 + ((BAR_ROWS - STRIP_H) // 2 * S if LEVQ else 0)
+for t_, b_ in enumerate(bgs):
+    if GRID and t_ != 0:
+        continue
+    b_.paste(strip_img, (strip_x, strip_y))
+    save_png("bg_%d" % t_, b_)   # rewrite: the backgrounds were saved before the strip existed
+name_x_lcd = pre_r[0] + 4 + text_width(F["tiny3x5"], "PRESET") + 4
+name_w_lcd = pre_r[0] + pre_r[1] - 10 - name_x_lcd
+for key_, (rx, rw), left, pk in (("mnmPresetPrev", prev_r, True, "preset_prev"), ("mnmPresetNext", next_r, False, "preset_next")):
+    off = strip_img.crop((rx * S, 0, (rx + rw) * S, STRIP_H * S))
+    onc = Canvas(rw, STRIP_H)
+    onc.fill(0, 0, rw, STRIP_H, True)
+    arrow_h(onc, rw // 2, STRIP_H // 2, left, False)
+    fo, fn_ = save_png(key_ + "_off", off), save_png(key_ + "_on", onc.image())
+    defs[key_] = ss._local(key_, [ss._action("Mouse Down", "Q-Link"), ss._action("Enter Pressed", "Toggle Switch")],
+                           [ss._focus(rw * S, STRIP_H * S), ss._button(fn_, fo, 1, 1, rw * S, STRIP_H * S)])
+    place(key_, pk, PIDX[pk], strip_x + rx * S, strip_y, rw * S, STRIP_H * S, focus="No", tab=0 if GRID else None)
+defs["mnmPresetName"] = ss._local("mnmPresetName", [], [ss._value_label(0, 0, name_w_lcd * S, 11 * S, 30.0, "%02x%02x%02x" % INK, "left verticallyCentred")])
+place("mnmPresetName", "Preset name", PIDX["preset_name"], strip_x + name_x_lcd * S, strip_y + 2 * S, name_w_lcd * S, 11 * S, focus="No", tab=0 if GRID else None)
+# the selector's field is the tap target for nothing yet (a preset list is a later step); the arrows step
 
 # knob cells
 TOUCH_INSET = 2                                     # LCD px kept clear at the cell's edges
@@ -908,8 +888,8 @@ if LEVQ:
               TOUCH_W, TOUCH_H, focus="No", tab=TAB_OF["GLOBAL"])
 elif not GRID:
     # LEV, horizontal under the preset strip (upstream's LEV column turned on its side): "LEV", a dotted frame, a solid level bar
-    lev_y = bank_y + (STRIP_H + STRIP_GAP) * S
-    LEV_ROWS = (OY + TOP - lev_y) // S - 1   # whatever headroom is left under BANK, up to the page title bars
+    LEV_ROWS = BAR_ROWS - STRIP_H - 1       # 10: the strip + LEV are as tall as the machine block
+    lev_y = strip_y + (STRIP_H + 1) * S
     lev_lbl_w = text_width(F["bold8"], "LEV") + 4
     lv = Canvas(strip_w, LEV_ROWS)
     lv.text(F["bold8"], "LEV", 0, 1)
@@ -970,7 +950,7 @@ else:
               focus="Yes" if sgm == 0 else "No", img=fn, raw=100)
 
 # machine picker: field over the machine bar toggles machine__open; panel + one image button per machine
-pk_x, pk_y, pk_w, pk_h = OX + PAGES_X0, OY + TOP - TAB_OVERHANG * S, PAGES_W, WIN_H - 8 - (TOP - TAB_OVERHANG * S)   # covers every page row
+pk_x, pk_y, pk_w, pk_h = OX + PAGES_X0, OY + TOP - TAB_OVERHANG * S, PAGES_W, 340
 if FXV:   # one column (the FX group), as wide as one of the seven columns of the full picker, tall enough for its 7 machines
     pk_w, pk_h = (PAGES_W - 6 * 6) // 7 + 20, 468
 groups = []
