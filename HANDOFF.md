@@ -134,6 +134,9 @@ checkpoint, not just at the end.
   restart MPC and edit MPC.settings. Known mpc-vst gotcha: an auto-layout with a popup fails unless the layout is
   copied to a real layout.conf first (done).
 
+- **2026-09-27 later: Q-Links work again (user report), cause unconfirmed.** It coincided with pinning `mnm-dsp` off core 0 and
+  parking it when idle, which fits the theory that a FIFO-30 thread using ~46% of the UI core disturbed MPC's UI thread
+  (but the JV-880 test then had no Monomodule instance inserted, so treat as unproven). Reopen only if it returns.
 - **2026-09-27: Q-Link bug PARKED until the VST is ready (user decision).** On the Force, Monomodule One (and the
   JV-880) Q-Links on 0..127 params climb 1,2,3 then restart near 0 (LEVEL 100 -> 101 -> ~1). Traced: MPC sets exact
   k/128 steps and restarts from ~1/128 each touch even though getParameter returns the right (shadow) value; the
