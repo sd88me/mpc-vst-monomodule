@@ -103,28 +103,36 @@ your own file: **the generated `.syx` is never committed, distributed or include
 compiled into the plugin binary. So every build is personal: you build it from your own OS file, and
 the result is yours alone to install, never to redistribute.
 
-Needs Docker and a sibling checkout of [mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins)
-(the shared wrapper and skin tooling):
+Needs Docker (and `ssh`/`scp` if you use `-d` below). Everything else — cloning the
+[mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins) sibling checkout (shared wrapper and skin
+tooling), version numbering, packaging — is handled for you:
 
 ```
 git clone --recursive https://github.com/sd88me/mpc-vst-monomodule.git
 cd mpc-vst-monomodule
-release/build_from_os.sh <your-os.syx> <mpc-vst-plugins checkout>   # ~5 min: discovery, bit-exactness gate, build, skins
-release/package.sh 0.9.0                                            # -> dist/Monomodule-0.9.0-mpc-armv7.zip
+release/release.sh <your-os.syx> -d <device-ip>   # ~5 min: build, package, install onto the device
 ```
 
-Then, on the device:
+That's the whole thing: discovery trace, bit-exactness gate, cross-compile, skins, zip, and (with `-d`)
+scp + install onto the device in one call. Leave off `-d` to just get `dist/Monomodule-<version>-mpc-armv7.zip`
+and install it yourself later:
 
 ```
-scp -r dist/Monomodule-0.9.0-mpc-armv7 root@<device-ip>:/tmp/
-ssh root@<device-ip> sh /tmp/Monomodule-0.9.0-mpc-armv7/install.sh
+scp -r dist/Monomodule-<version>-mpc-armv7 root@<device-ip>:/tmp/
+ssh root@<device-ip> sh /tmp/Monomodule-<version>-mpc-armv7/install.sh
 ```
 
-That installs both **Monomodule One** and **Monomodule FX**, backs up `MPC.settings` first, and needs
-one MPC restart (save your project first) — `release/uninstall.sh` reverses it. `build_from_os.sh`'s
-bit-exactness gate must pass before it builds anything for the device: if it doesn't, something about
-your OS file or toolchain differs from what this was built against, and the build stops rather than
-ship a build that isn't verified correct.
+Either way it installs both **Monomodule One** and **Monomodule FX**, backs up `MPC.settings` first, and
+needs one MPC restart (save your project first) — `release/uninstall.sh` reverses it. The bit-exactness
+gate inside `release.sh` must pass before it builds anything for the device: if it doesn't, something
+about your OS file or toolchain differs from what this was built against, and the build stops rather
+than ship a build that isn't verified correct.
+
+`release.sh` picks a version from `git describe` (or a dated dev version if untagged); pass `-v` to
+override, `-m <checkout>` to point at your own mpc-vst-plugins checkout instead of auto-cloning one, and
+`-l <layout>` for a non-default skin layout. `release/build_from_os.sh` + `release/package.sh` (below)
+are still there individually if you want to run just one step, e.g. while iterating on a single OS file
+across multiple test builds.
 
 Want the factory kit bank as presets too? `release/extract_factory.sh <your-os.syx> <out.syx>`, then
 copy the result into `/sdcard/vst/monomodule/dumps/` (see "The factory bank" above).
