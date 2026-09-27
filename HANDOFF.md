@@ -176,6 +176,12 @@ checkpoint, not just at the end.
   lowcontrast, red, blue, green, orange, and `<colour>-inverted` (ink/paper swapped). `preview_sheet.sh [layout]` makes a contact sheet.
   The installed skin on the Force is still the previous (vertical LEV) tabs build until the user picks a layout + colour.
 
+- **2026-09-27: `layout=grid` (upstream cell size, 4x, four quadrants per tab).** Tab 1: SYN, AMP, FILT, GLOBAL (machine block +
+  preset strip, room left below for more globals); tab 2: EFX, LFO1, LFO2, LFO3; a vertical LEV column (with the logo) at the left
+  on both tabs. Fills the 628 px height exactly at integer 4x; ~1130 of 1280 px wide. Worst-case decoded image memory
+  (`vst/skin/ram_estimate.py`): tabs 209 MB, 2x2 156 MB, grid 182 MB; MPC's RSS with one instance loaded was 922 MB in both the
+  3x and the 4x skins (so images are not all resident; not yet measured without an instance).
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.

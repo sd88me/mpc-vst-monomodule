@@ -47,15 +47,17 @@ if _swap:
     _ink, _paper = _paper, _ink
 _ink, _paper = args.get("ink", _ink), args.get("paper", _paper)
 
-LAYOUT = args.get("layout", "tabs")   # "tabs": two pages per tab at 4x (LFO2|LFO3 share a page); "2x2": four pages per tab at 3x
+LAYOUT = args.get("layout", "tabs")   # "tabs": two pages per tab at 4x (LFO2|LFO3 share a page); "2x2": four pages per tab at 3x, stretched cells;
+#   "grid": four quadrants per tab at 4x with upstream's own cell size; the machine block/preset strip take a quadrant, LEV a left column
 TABS = LAYOUT == "tabs"
-S = int(args.get("scale", "4" if TABS else "3"))   # screen px per LCD px (upstream draws at 3)
+GRID = LAYOUT == "grid"
+S = int(args.get("scale", "3" if LAYOUT == "2x2" else "4"))   # screen px per LCD px (upstream draws at 3)
 SKIN_W, SKIN_H = 1280, 628
 CELL, LABEL_Y, CONTENT_Y, CONTENT_H, VALUE_Y, VALUE_H = 32, 3, 9, 14, 23, 9
 TITLE_H, GRID_Y = 10, 11
-MARG, GAPX, BAR_ROWS, PAGE_GAP = 10, 8, 26, 12
+MARG, GAPX, BAR_ROWS, PAGE_GAP = 10, 8, 26, (8 if GRID else 12)
 # cell width in LCD px (upstream 32): wider cells use the whole width; the default fills the skin
-CW = int(args.get("cellw", str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
+CW = int(args.get("cellw", "32" if GRID else str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
 LCD_W = 4 * CW + 1                          # a page (upstream 129)
 PAGE_LCD_H = GRID_Y + 2 * CELL + 1      # 76
 TAB_OVERHANG = 2 if TABS else 0
@@ -63,8 +65,9 @@ PAGE_ROWS = 1 if TABS else 2
 LEV_W = 19 * S
 PAGES_W = 2 * LCD_W * S + PAGE_GAP
 BAR_X_W = MARG + LEV_W + GAPX           # window x of the machine block (right of the logo)
-TOP = 8 + BAR_ROWS * S + 8 + TAB_OVERHANG * S      # window y of the pages' title bars
-WIN_W = MARG + PAGES_W + MARG
+TOP = 4 if GRID else 8 + BAR_ROWS * S + 8 + TAB_OVERHANG * S      # window y of the pages' title bars
+PAGES_X0 = MARG + (LEV_W + GAPX if GRID else 0)   # grid: the logo/LEV column stands left of the pages
+WIN_W = PAGES_X0 + PAGES_W + MARG
 WIN_H = TOP + PAGE_ROWS * PAGE_LCD_H * S + (PAGE_ROWS - 1) * PAGE_GAP + 8
 OX, OY = (SKIN_W - WIN_W) // 2, (SKIN_H - WIN_H) // 2
 FRAMES = 128
@@ -340,6 +343,10 @@ if TABS:
     PAGE_POS = {"SYN": (0, 0), "AMP": (1, 0), "FILT": (0, 0), "EFX": (1, 0), "LFO1": (0, 0), "LFO23": (1, 0)}   # (column, row) on its tab
     TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 1, "EFX": 1, "LFO1": 2, "LFO23": 2}
     PAGE_TITLE = {"SYN": "SYN", "AMP": "AMP", "FILT": "FILT", "EFX": "EFX", "LFO1": "LFO1", "LFO23": None}
+elif GRID:
+    PAGE_POS = {"SYN": (0, 0), "AMP": (1, 0), "FILT": (0, 1), "GLOBAL": (1, 1), "EFX": (0, 0), "LFO1": (1, 0), "LFO2": (0, 1), "LFO3": (1, 1)}
+    TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 0, "GLOBAL": 0, "EFX": 1, "LFO1": 1, "LFO2": 1, "LFO3": 1}
+    PAGE_TITLE = {n: n for n in PAGE_POS}
 else:
     PAGE_POS = {"SYN": (0, 0), "AMP": (1, 0), "FILT": (0, 1), "EFX": (1, 1), "LFO1": (0, 0), "LFO2": (1, 0), "LFO3": (0, 1)}
     TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 0, "EFX": 0, "LFO1": 1, "LFO2": 1, "LFO3": 1}
@@ -348,7 +355,7 @@ else:
 
 def page_origin(name):
     col, row = PAGE_POS[name]
-    return OX + MARG + col * (LCD_W * S + PAGE_GAP), OY + TOP + row * (PAGE_LCD_H * S + PAGE_GAP)    # skin px of the title bar's top-left
+    return OX + PAGES_X0 + col * (LCD_W * S + PAGE_GAP), OY + TOP + row * (PAGE_LCD_H * S + PAGE_GAP)    # skin px of the title bar's top-left
 
 
 def draw_tab(cv, x, w, bar_y, active):
@@ -595,7 +602,7 @@ bgs = [Image.new("RGB", (SKIN_W, SKIN_H), PAPER) for _ in range(NTABS)]
 
 # logo, LEV frame (on every tab)
 for b_ in bgs:
-    draw_logo(b_, OX + MARG, OY + 8, LEV_W, 18 * S, INK)
+    draw_logo(b_, OX + MARG, OY + (TOP if GRID else 8), LEV_W, 18 * S, INK)
 
 # static pages (SYN uses the default machine's labels here; the overlay per machine repaints its grid)
 PAGE_CELLS = {"AMP": shared_params(0), "FILT": shared_params(1), "EFX": shared_params(2), "LFO1": lfo_params()}
@@ -607,8 +614,23 @@ for name, cells in PAGE_CELLS.items():
     cv, oy = page_canvas(name, cells)
     x, y = page_origin(name)
     bgs[TAB_OF[name]].paste(cv.image(), (x, y - oy * S))
+if GRID:   # the machine block + preset strip's quadrant: a title bar and a dotted body, like the pages
+    gcv = Canvas(LCD_W, PAGE_LCD_H)
+    gcv.fill(0, 0, LCD_W, TITLE_H, True)
+    gcv.text(F["bold8"], "GLOBAL", 2, 1, False)
+    gcv.dots_h(0, LCD_W - 1, GRID_Y); gcv.dots_h(0, LCD_W - 1, PAGE_LCD_H - 1)
+    gcv.dots_v(0, GRID_Y, PAGE_LCD_H - 1); gcv.dots_v(LCD_W - 1, GRID_Y, PAGE_LCD_H - 1)
+    gx_, gy_ = page_origin("GLOBAL")
+    bgs[0].paste(gcv.image(), (gx_, gy_))
 for t, b_ in enumerate(bgs):
     image_comp("Background", save_png("bg_%d" % t, b_), 0, 0, SKIN_W, SKIN_H, tab=t)
+
+# where the machine block and the preset strip go: the header (tabs, 2x2) or the GLOBAL quadrant (grid)
+if GRID:
+    _gx, _gy = page_origin("GLOBAL")
+    BAR_X, BAR_Y = _gx + 2 * S, _gy + 12 * S
+else:
+    BAR_X, BAR_Y = OX + BAR_X_W, OY + 8
 
 # SYN overlays per machine: the grid (labels differ) + the machine bar
 syn_x, syn_y = page_origin("SYN")
@@ -622,7 +644,8 @@ for mi, m in enumerate(MACHINES):
     bar = machine_bar(m)
     BAR_W_MAX = max(globals().get("BAR_W_MAX", 0), bar.size[0])
     fn = save_png("mb_%02d" % mi, bar)
-    image_comp("Machine %s" % m["displayName"], fn, OX + BAR_X_W, OY + 8, bar.size[0], bar.size[1], cond=enabling("machine", mi, len(MACHINES)))
+    image_comp("Machine %s" % m["displayName"], fn, BAR_X, BAR_Y, bar.size[0], bar.size[1], cond=enabling("machine", mi, len(MACHINES)),
+               tab=0 if GRID else None)
 
 # preset strip (upstream PresetStrip minus the library parts): PREV, the PRESET selector (its name is live text), NEXT
 def frame_box(cv, x, y, w, h, on=True):
@@ -638,8 +661,11 @@ def arrow_h(cv, cx, cy, left, on):
 
 
 STRIP_H = 15
-strip_x = OX + BAR_X_W + BAR_W_MAX + 12
-strip_w = min((OX + WIN_W - MARG - strip_x) // S, 190)
+if GRID:
+    strip_x, strip_w = _gx, LCD_W
+else:
+    strip_x = OX + BAR_X_W + BAR_W_MAX + 12
+    strip_w = min((OX + WIN_W - MARG - strip_x) // S, 190)
 arrow_w = 12
 preset_w = strip_w - 2 * (arrow_w - 1)
 strip = Canvas(strip_w, STRIP_H)
@@ -655,8 +681,10 @@ for r_ in range(3):   # caret, down
     w_ = 5 - 2 * r_
     strip.fill(pre_r[0] + pre_r[1] - 9 + (5 - w_) // 2, 6 + r_, w_, 1)
 strip_img = strip.image()
-strip_y = OY + 8
+strip_y = _gy + (12 + BAR_ROWS + 3) * S if GRID else OY + 8
 for t_, b_ in enumerate(bgs):
+    if GRID and t_ != 0:
+        continue
     b_.paste(strip_img, (strip_x, strip_y))
     save_png("bg_%d" % t_, b_)   # rewrite: the backgrounds were saved before the strip existed
 name_x_lcd = pre_r[0] + 4 + text_width(F["tiny3x5"], "PRESET") + 4
@@ -669,9 +697,9 @@ for key_, (rx, rw), left, pk in (("mnmPresetPrev", prev_r, True, "preset_prev"),
     fo, fn_ = save_png(key_ + "_off", off), save_png(key_ + "_on", onc.image())
     defs[key_] = ss._local(key_, [ss._action("Mouse Down", "Q-Link"), ss._action("Enter Pressed", "Toggle Switch")],
                            [ss._focus(rw * S, STRIP_H * S), ss._button(fn_, fo, 1, 1, rw * S, STRIP_H * S)])
-    place(key_, pk, PIDX[pk], strip_x + rx * S, strip_y, rw * S, STRIP_H * S, focus="No")
+    place(key_, pk, PIDX[pk], strip_x + rx * S, strip_y, rw * S, STRIP_H * S, focus="No", tab=0 if GRID else None)
 defs["mnmPresetName"] = ss._local("mnmPresetName", [], [ss._value_label(0, 0, name_w_lcd * S, 11 * S, 30.0, "%02x%02x%02x" % INK, "left verticallyCentred")])
-place("mnmPresetName", "Preset name", PIDX["preset_name"], strip_x + name_x_lcd * S, strip_y + 2 * S, name_w_lcd * S, 11 * S, focus="No")
+place("mnmPresetName", "Preset name", PIDX["preset_name"], strip_x + name_x_lcd * S, strip_y + 2 * S, name_w_lcd * S, 11 * S, focus="No", tab=0 if GRID else None)
 # the selector's field is the tap target for nothing yet (a preset list is a later step); the arrows step
 
 # knob cells
@@ -733,36 +761,71 @@ if TABS:
         place(key, "LFO tab %d" % (t + 2), PIDX["lfo23tab"], lx + tx * S, ly - oy3 * S, tw * S, (oy3 + TITLE_H) * S, focus="No", tab=2)
 
 
-# LEV, horizontal under the preset strip (upstream's LEV column turned on its side): "LEV", a dotted frame, a solid level bar
-LEV_ROWS = BAR_ROWS - STRIP_H - 1       # 10: the strip + LEV are as tall as the machine block
-lev_y = strip_y + (STRIP_H + 1) * S
-lev_lbl_w = text_width(F["bold8"], "LEV") + 4
-lv = Canvas(strip_w, LEV_ROWS)
-lv.text(F["bold8"], "LEV", 0, 1)
-fx0, fw_ = lev_lbl_w, strip_w - lev_lbl_w
-lv.dots_h(fx0, fx0 + fw_ - 1, 0); lv.dots_h(fx0, fx0 + fw_ - 1, LEV_ROWS - 1)
-lv.dots_v(fx0, 0, LEV_ROWS - 1); lv.dots_v(fx0 + fw_ - 1, 0, LEV_ROWS - 1)
-for t_, b_ in enumerate(bgs):
-    b_.paste(lv.image(), (strip_x, lev_y))
-    save_png("bg_%d" % t_, b_)
-bar_x0, bar_w_max = fx0 + 2, fw_ - 4          # the bar's room inside the frame
-zone_x, zone_w = fx0 + 1, fw_ - 2              # the touch/strip zone: the frame's interior
-frames = []
-for raw in range(FRAMES):
-    cv = Canvas(zone_w, LEV_ROWS - 2)
-    n_ = int(round(raw / 127.0 * bar_w_max))
-    cv.fill(bar_x0 - zone_x, 1, n_, LEV_ROWS - 4, True)
-    frames.append(cv.image())
-fw_px, fh_px = frames[0].size
-st = Image.new("RGB", (fw_px, fh_px * FRAMES))
-for i_, f_ in enumerate(frames):
-    st.paste(f_, (0, i_ * fh_px))
-fn = save_png("lev_h", st)
-kd = knob_def(fn, fw_px, fh_px, orient="Horizontal")
-place(kd, "LEV", PIDX["level"], strip_x + zone_x * S, lev_y + S, fw_px, fh_px, focus="Yes", img=fn, raw=100)
+if not GRID:
+    # LEV, horizontal under the preset strip (upstream's LEV column turned on its side): "LEV", a dotted frame, a solid level bar
+    LEV_ROWS = BAR_ROWS - STRIP_H - 1       # 10: the strip + LEV are as tall as the machine block
+    lev_y = strip_y + (STRIP_H + 1) * S
+    lev_lbl_w = text_width(F["bold8"], "LEV") + 4
+    lv = Canvas(strip_w, LEV_ROWS)
+    lv.text(F["bold8"], "LEV", 0, 1)
+    fx0, fw_ = lev_lbl_w, strip_w - lev_lbl_w
+    lv.dots_h(fx0, fx0 + fw_ - 1, 0); lv.dots_h(fx0, fx0 + fw_ - 1, LEV_ROWS - 1)
+    lv.dots_v(fx0, 0, LEV_ROWS - 1); lv.dots_v(fx0 + fw_ - 1, 0, LEV_ROWS - 1)
+    for t_, b_ in enumerate(bgs):
+        b_.paste(lv.image(), (strip_x, lev_y))
+        save_png("bg_%d" % t_, b_)
+    bar_x0, bar_w_max = fx0 + 2, fw_ - 4          # the bar's room inside the frame
+    zone_x, zone_w = fx0 + 1, fw_ - 2              # the touch/strip zone: the frame's interior
+    frames = []
+    for raw in range(FRAMES):
+        cv = Canvas(zone_w, LEV_ROWS - 2)
+        n_ = int(round(raw / 127.0 * bar_w_max))
+        cv.fill(bar_x0 - zone_x, 1, n_, LEV_ROWS - 4, True)
+        frames.append(cv.image())
+    fw_px, fh_px = frames[0].size
+    st = Image.new("RGB", (fw_px, fh_px * FRAMES))
+    for i_, f_ in enumerate(frames):
+        st.paste(f_, (0, i_ * fh_px))
+    fn = save_png("lev_h", st)
+    kd = knob_def(fn, fw_px, fh_px, orient="Horizontal")
+    place(kd, "LEV", PIDX["level"], strip_x + zone_x * S, lev_y + S, fw_px, fh_px, focus="Yes", img=fn, raw=100)
+
+else:
+    # LEV as upstream's column (label, dotted frame, solid bar) under the logo, the full height of the pages
+    col_rows = (WIN_H - TOP - 8) // S                       # rows the column can use
+    lv_top = 20                                              # the logo takes rows 0..17
+    lv = Canvas(19, col_rows)
+    lv.text_centred(F["bold8"], "LEV", 0, 19, lv_top - 1)
+    fy_ = lv_top + 10
+    lv.dots_h(0, 18, fy_); lv.dots_h(0, 18, col_rows - 1); lv.dots_v(0, fy_, col_rows - 1); lv.dots_v(18, fy_, col_rows - 1)
+    lev_x, lev_y = OX + MARG, OY + TOP
+    for t_, b_ in enumerate(bgs):
+        b_.paste(lv.image().crop((0, 18 * S, 19 * S, col_rows * S)), (lev_x, lev_y + 18 * S))   # below the logo
+        save_png("bg_%d" % t_, b_)
+    inner_y0 = fy_ + 2
+    seg_n = 5
+    seg_h = (col_rows - 1 - inner_y0 - 1) // seg_n            # rows per strip segment (keeps each strip image short)
+    inner_h = seg_h * seg_n
+    for sgm in range(seg_n):
+        frames = []
+        for raw in range(FRAMES):
+            cv = Canvas(17, seg_h)
+            lvl = int(round(raw / 127.0 * inner_h))
+            for r in range(seg_h):
+                if inner_y0 + sgm * seg_h + r >= inner_y0 + inner_h - lvl:
+                    for c in range(1, 7):
+                        cv.set(c, r)
+            frames.append(cv.image())
+        st = Image.new("RGB", (17 * S, seg_h * S * FRAMES))
+        for i_, f_ in enumerate(frames):
+            st.paste(f_, (0, i_ * seg_h * S))
+        fn = save_png("lev_%d" % sgm, st)
+        kd = knob_def(fn, 17 * S, seg_h * S)
+        place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x + S, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S,
+              focus="Yes" if sgm == 0 else "No", img=fn, raw=100)
 
 # machine picker: field over the machine bar toggles machine__open; panel + one image button per machine
-pk_x, pk_y, pk_w, pk_h = OX + BAR_X_W, OY + TOP - TAB_OVERHANG * S, PAGES_W, 340
+pk_x, pk_y, pk_w, pk_h = OX + PAGES_X0, OY + TOP - TAB_OVERHANG * S, PAGES_W, 340
 groups = []
 for mi, m in enumerate(MACHINES):
     if not groups or groups[-1]["group"] != m["group"]:
@@ -820,7 +883,7 @@ open_c = enabling("machine__open", 1, 2)
 # the field over the machine bar: a tap toggles the picker
 key = "mnmPickField"
 defs[key] = ss._local(key, [ss._action("Mouse Down", "Toggle Switch"), ss._action("Enter Pressed", "Toggle Switch")], [ss._focus(75 * S, BAR_ROWS * S)])
-place(key, "Machine picker", PIDX["machine__open"], OX + BAR_X_W, OY + 8, 75 * S, BAR_ROWS * S, focus="Yes", extra={"Text": PIDX["machine"]})
+place(key, "Machine picker", PIDX["machine__open"], BAR_X, BAR_Y, 75 * S, BAR_ROWS * S, focus="Yes", extra={"Text": PIDX["machine"]}, tab=0 if GRID else None)
 parts = []
 pk = "mnmPickPanel"
 defs[pk] = ss._local(pk, [], [ss._sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": fn_panel}, ss._bounds(0, 0, pk_w, pk_h), "Image")])
@@ -851,6 +914,13 @@ if TABS:
         ("FILT / EFX", [("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
                  ("LFO3 / MIX", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"])]),
+    ]
+elif GRID:
+    TAB_SETS = [
+        ("SYN / AMP / FILT", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)]),
+                              ("FILT / MIX", ["filt%d" % k for k in range(8)] + ["level", "machine"])]),
+        ("EFX / LFO", [("EFX / LFO1", ["efx%d" % k for k in range(8)] + ["lfo1_%d" % k for k in range(8)]),
+                       ("LFO2 / LFO3", ["lfo2_%d" % k for k in range(8)] + ["lfo3_%d" % k for k in range(8)])]),
     ]
 else:
     TAB_SETS = [
