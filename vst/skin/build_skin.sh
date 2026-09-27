@@ -10,5 +10,6 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$ROOT":/r -v "$(dirname "$OS")":/os:r
     $U/plugin/one/RomArt.cpp $U/plugin/one/SpecData.cpp $U/core/firmware/Firmware.cpp &&
   vst/build/mnm-artdump /os/$(basename "$OS") vst/build/art.json"
 python3 "$MV/tools/gen_vst.py" "$HERE/vst.json" >/dev/null
+EXTRA="${@:3}"
 docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e MPC_VST_TOOLS=/mv/tools -v "$ROOT":/r -v "$MV":/mv:ro -w /r python:3.11-slim sh -c \
-  "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 vst/skin/mk_skin.py vst/build/art.json vst/params.json vst/build/skin"
+  "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 vst/skin/mk_skin.py vst/build/art.json vst/params.json vst/build/skin $EXTRA"

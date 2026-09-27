@@ -300,7 +300,7 @@
    "name": "LFO1 2",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 64,
    "display": "int"
   },
   {
@@ -324,7 +324,7 @@
    "name": "LFO1 5",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 1,
    "display": "int"
   },
   {
@@ -332,7 +332,7 @@
    "name": "LFO1 6",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 64,
    "display": "int"
   },
   {
@@ -364,7 +364,7 @@
    "name": "LFO2 2",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 64,
    "display": "int"
   },
   {
@@ -388,7 +388,7 @@
    "name": "LFO2 5",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 1,
    "display": "int"
   },
   {
@@ -396,7 +396,7 @@
    "name": "LFO2 6",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 64,
    "display": "int"
   },
   {
@@ -428,7 +428,7 @@
    "name": "LFO3 2",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 64,
    "display": "int"
   },
   {
@@ -452,7 +452,7 @@
    "name": "LFO3 5",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 1,
    "display": "int"
   },
   {
@@ -460,7 +460,7 @@
    "name": "LFO3 6",
    "min": 0,
    "max": 127,
-   "default": 0,
+   "default": 64,
    "display": "int"
   },
   {
@@ -570,6 +570,27 @@
     "LFO3 MIDI"
    ],
    "default": 0
+  },
+  {
+   "key": "preset_prev",
+   "name": "Preset Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "preset_next",
+   "name": "Preset Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "preset_name",
+   "name": "Preset",
+   "min": 0,
+   "max": 0,
+   "display": "string"
   }
  ],
  "sections": [

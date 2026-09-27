@@ -159,6 +159,17 @@ checkpoint, not just at the end.
   `custom_skin: true` (new gen_vst option in mpc-vst). Engine: DSP thread pinned to the least busy non-UI core, parks after 2 s silence.
   Not done: preset strip, BPM/host tempo, menu/skin dialog, install flow from the user's OS file, wider discovery workload.
 
+- **2026-09-27: skin at 4x with three tabs, colour presets, preset strip (user request).** Tabs: SYN+AMP, FILT+EFX,
+  LFO1+LFO2|3 (each tab has its own background; the machine block, LEV and preset strip are on all of them; Q-Link
+  pages: SYN/AMP, FILT/EFX, LFO1/LFO2, LFO3/level+machine). Colours are a build option in `vst/skin/skin.conf`
+  (`skin=default|inverted|lowcontrast`, `ink=`/`paper=`; a runtime switch would triple the image memory). Preset strip =
+  PREV / PRESET selector / NEXT (upstream's save and library buttons are omitted); the name is MPC live text
+  (`preset_name`, Titillium), prev/next are momentary params. Presets = Init per machine + every synth sound of
+  `.syx` kit dumps in `/sdcard/vst/monomodule/dumps/` (parsed with upstream MnmDump); stepping is within the current
+  machine; a `*` marks a modified sound. Upstream's `arrowH()` draws its PREV arrow pointing right; the skin mirrors it.
+  LFO defaults now match upstream (PAGE 0, DEST 64, TRIG 0, WAVE 0, MULT 1, SPD 64, INTL 0, DPTH 0). Params: 67.
+  Next: a preset list (tap the selector), the install flow from the user's own OS file, wider discovery coverage.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.

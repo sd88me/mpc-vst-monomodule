@@ -27,19 +27,38 @@ TOOLS = os.environ.get("MPC_VST_TOOLS") or os.path.join(os.path.expanduser("~"),
 sys.path.insert(0, TOOLS)
 import shadow_skin as ss  # noqa: E402  (TUI.json helpers shared with the other ports)
 
-S = 3                       # screen px per LCD px (upstream kScale)
+# options: skin.conf (key=value lines next to this script) overridden by name=value arguments
+args = {}
+_conf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skin.conf")
+if os.path.isfile(_conf):
+    for _l in open(_conf):
+        if "=" in _l and not _l.strip().startswith("#"):
+            _k, _v = _l.split("=", 1)
+            args[_k.strip()] = _v.strip()
+args.update(dict(a.split("=", 1) for a in sys.argv[4:]))
+# colours: upstream's skin presets (Skin.h): default black on white, inverted, low contrast; custom = ink=/paper=
+PRESETS = {"default": ("000000", "ffffff"), "inverted": ("ffffff", "000000"), "lowcontrast": ("5c5c5c", "c4c4c4")}
+_ink, _paper = PRESETS.get(args.get("skin", "default"), PRESETS["default"])
+_ink, _paper = args.get("ink", _ink), args.get("paper", _paper)
+
+S = int(args.get("scale", "4"))   # screen px per LCD px (upstream draws at 3; 4 fits two pages per tab on the Force)
 SKIN_W, SKIN_H = 1280, 628
-WIN_W, WIN_H = 1270, 590    # upstream One editor
-OX, OY = (SKIN_W - WIN_W) // 2, (SKIN_H - WIN_H) // 2
 CELL, LABEL_Y, CONTENT_Y, CONTENT_H, VALUE_Y, VALUE_H = 32, 3, 9, 14, 23, 9
 TITLE_H, GRID_Y, LCD_W = 10, 11, 129
 PAGE_LCD_H = GRID_Y + 2 * CELL + 1      # 76
 TAB_OVERHANG = 2
+MARG, GAPX, BAR_ROWS, PAGE_GAP = 10, 8, 26, 12
+LEV_W = 19 * S
+PAGES_W = 2 * LCD_W * S + PAGE_GAP
+BAR_X_W = MARG + LEV_W + GAPX           # window x of the machine block and the first page
+TOP = 8 + BAR_ROWS * S + 8 + TAB_OVERHANG * S      # window y of the pages' title bars
+WIN_W = BAR_X_W + PAGES_W + MARG
+WIN_H = TOP + PAGE_LCD_H * S + 8
+OX, OY = (SKIN_W - WIN_W) // 2, (SKIN_H - WIN_H) // 2
 FRAMES = 128
 
-args = dict(a.split("=", 1) for a in sys.argv[4:])
-INK = tuple(int(args.get("ink", "000000")[i:i + 2], 16) for i in (0, 2, 4))
-PAPER = tuple(int(args.get("paper", "ffffff")[i:i + 2], 16) for i in (0, 2, 4))
+INK = tuple(int(_ink[i:i + 2], 16) for i in (0, 2, 4))
+PAPER = tuple(int(_paper[i:i + 2], 16) for i in (0, 2, 4))
 
 
 # ---------------------------------------------------------------- art ---------------------------------------------
@@ -251,7 +270,9 @@ def strip_image(p, cache={}):
     return cache[k]
 
 
-defs, kids_all, on_top = {}, [], []
+defs, on_top = {}, []
+NTABS = 3
+TABK = [[] for _ in range(NTABS)]   # components per tab (tab=None on place()/image_comp(): every tab)
 PREVIEW = []   # (image file, x, y, w, h, condition, frame index or None), in draw order, for the offline composite
 
 
@@ -267,9 +288,9 @@ def knob_def(fn, w, h):
     return key
 
 
-def place(ctype, name, index, x, y, w, h, focus="No", cond=None, extra=None, kids=None, img=None, raw=None):
+def place(ctype, name, index, x, y, w, h, focus="No", cond=None, extra=None, kids=None, img=None, raw=None, tab=None):
     if img:
-        PREVIEW.append((img, x, y, w, h, cond, raw))
+        PREVIEW.append((img, x, y, w, h, cond, raw, tab))
     m = [{"key": "Data", "value": "Parameter %d" % index}]
     for hn, hi in (extra or {}).items():
         m.append({"key": hn, "value": "Parameter %d" % hi})
@@ -278,16 +299,24 @@ def place(ctype, name, index, x, y, w, h, focus="No", cond=None, extra=None, kid
         b["additionalInvalidatingHandles"] = [cond]
     c = {"version": 2, "componentData": {"version": 1, "name": name, "type": ctype, "data": {"version": 1, "handleName": "Data"}},
          "handle remapping": {"version": 1, "map": m}, "bounds": b}
-    (kids if kids is not None else kids_all).append(c)
+    add_kid(c, kids, tab)
 
 
-def image_comp(name, fn, x, y, w, h, cond=None, kids=None):
-    PREVIEW.append((fn, x, y, w, h, cond, None))
+def add_kid(c, kids, tab):
+    if kids is not None:
+        kids.append(c)
+    else:
+        for t in ([tab] if tab is not None else range(NTABS)):
+            TABK[t].append(c)
+
+
+def image_comp(name, fn, x, y, w, h, cond=None, kids=None, tab=None):
+    PREVIEW.append((fn, x, y, w, h, cond, None, tab))
     b = ss._bounds(x, y, w, h, show="Show" if cond else "Show")
     if cond:
         b["additionalInvalidatingHandles"] = [cond]
     c = ss._sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": fn}, b, name)
-    (kids if kids is not None else kids_all).append(c)
+    add_kid(c, kids, tab)
 
 
 def enabling(key, i, n):
@@ -295,16 +324,13 @@ def enabling(key, i, n):
 
 
 # ------------------------------------------------------------ page geometry (window coords -> skin px) --------------
-LEV_W = 19 * S
-PAGE_X = [10 + LEV_W + 8 + i * (LCD_W * S + 12) for i in range(3)]      # 75, 474, 873
-PAGE_Y = [98, 98 + PAGE_LCD_H * 0 + 228 + 12]                              # 98, 338
-PAGES = {"SYN": (0, 0), "AMP": (1, 0), "LFO1": (2, 0), "FILT": (0, 1), "EFX": (1, 1), "LFO23": (2, 1)}
+PAGE_SLOT = {"SYN": 0, "AMP": 1, "FILT": 0, "EFX": 1, "LFO1": 0, "LFO23": 1}     # left / right on its tab
+TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 1, "EFX": 1, "LFO1": 2, "LFO23": 2}
 PAGE_TITLE = {"SYN": "SYN", "AMP": "AMP", "FILT": "FILT", "EFX": "EFX", "LFO1": "LFO1", "LFO23": None}
 
 
 def page_origin(name):
-    c, r = PAGES[name]
-    return OX + PAGE_X[c], OY + PAGE_Y[r]    # skin px of the title bar's top-left
+    return OX + BAR_X_W + PAGE_SLOT[name] * (LCD_W * S + PAGE_GAP), OY + TOP    # skin px of the title bar's top-left
 
 
 def draw_tab(cv, x, w, bar_y, active):
@@ -547,16 +573,18 @@ def syn_params(m):
     return [P(d) for d in m["params"]]
 
 
-bg = Image.new("RGB", (SKIN_W, SKIN_H), PAPER)
+bgs = [Image.new("RGB", (SKIN_W, SKIN_H), PAPER) for _ in range(NTABS)]
 
-# logo, LEV frame
-draw_logo(bg, OX + 10, OY + 8, LEV_W, 18 * S, INK)
-LEV_H_LCD = 167
+# logo, LEV frame (on every tab)
+LEV_H_LCD = 11 + PAGE_LCD_H
 lev = Canvas(19, LEV_H_LCD)
 lev.text_centred(F["bold8"], "LEV", 0, 19, 1)
 fy, fh = 11, LEV_H_LCD - 11
 lev.dots_h(0, 18, fy); lev.dots_h(0, 18, fy + fh - 1); lev.dots_v(0, fy, fy + fh - 1); lev.dots_v(18, fy, fy + fh - 1)
-bg.paste(lev.image(), (OX + 10, OY + 65))
+LEV_X, LEV_Y = OX + MARG, OY + TOP - 11 * S
+for b_ in bgs:
+    draw_logo(b_, OX + MARG, OY + 8, LEV_W, 18 * S, INK)
+    b_.paste(lev.image(), (LEV_X, LEV_Y))
 
 # static pages (SYN uses the default machine's labels here; the overlay per machine repaints its grid)
 PAGE_CELLS = {"AMP": shared_params(0), "FILT": shared_params(1), "EFX": shared_params(2), "LFO1": lfo_params(), "LFO23": lfo_params()}
@@ -565,9 +593,9 @@ PAGE_CELLS["SYN"] = syn_params(default_machine)
 for name, cells in PAGE_CELLS.items():
     cv, oy = page_canvas(name, cells)
     x, y = page_origin(name)
-    bg.paste(cv.image(), (x, y - oy * S))
-save_png("bg", bg)
-image_comp("Background", "bg.png", 0, 0, SKIN_W, SKIN_H)
+    bgs[TAB_OF[name]].paste(cv.image(), (x, y - oy * S))
+for t, b_ in enumerate(bgs):
+    image_comp("Background", save_png("bg_%d" % t, b_), 0, 0, SKIN_W, SKIN_H, tab=t)
 
 # SYN overlays per machine: the grid (labels differ) + the machine bar
 syn_x, syn_y = page_origin("SYN")
@@ -577,10 +605,61 @@ for mi, m in enumerate(MACHINES):
     grid = cv.image().crop((0, (GRID_Y - 1) * S, LCD_W * S, PAGE_LCD_H * S))   # from the tie-arch row
     fn = save_png("syn_%02d" % mi, grid)
     image_comp("SYN grid %s" % m["displayName"], fn, syn_x, syn_y + (GRID_Y - 1) * S, LCD_W * S, (PAGE_LCD_H - GRID_Y + 1) * S,
-               cond=enabling("machine", mi, len(MACHINES)))
+               cond=enabling("machine", mi, len(MACHINES)), tab=0)
     bar = machine_bar(m)
+    BAR_W_MAX = max(globals().get("BAR_W_MAX", 0), bar.size[0])
     fn = save_png("mb_%02d" % mi, bar)
-    image_comp("Machine %s" % m["displayName"], fn, OX + 75, OY + 8, bar.size[0], bar.size[1], cond=enabling("machine", mi, len(MACHINES)))
+    image_comp("Machine %s" % m["displayName"], fn, OX + BAR_X_W, OY + 8, bar.size[0], bar.size[1], cond=enabling("machine", mi, len(MACHINES)))
+
+# preset strip (upstream PresetStrip minus the library parts): PREV, the PRESET selector (its name is live text), NEXT
+def frame_box(cv, x, y, w, h, on=True):
+    cv.fill(x, y, w, 1, on); cv.fill(x, y + h - 1, w, 1, on); cv.fill(x, y, 1, h, on); cv.fill(x + w - 1, y, 1, h, on)
+
+
+def arrow_h(cv, cx, cy, left, on):
+    # upstream's arrowH() draws its "left" arrow pointing right as well (tip at cx+1, base at cx-2); this one is mirrored
+    for c in range(4):
+        x = cx - 2 + c
+        h = 2 * c + 1 if left else 7 - 2 * c
+        cv.fill(x, cy - h // 2, 1, h, on)
+
+
+STRIP_H = 15
+strip_x = OX + BAR_X_W + BAR_W_MAX + 12
+strip_w = min((OX + WIN_W - MARG - strip_x) // S, 190)
+arrow_w = 12
+preset_w = strip_w - 2 * (arrow_w - 1)
+strip = Canvas(strip_w, STRIP_H)
+prev_r = (0, arrow_w)
+pre_r = (arrow_w - 1, preset_w)
+next_r = (arrow_w - 1 + preset_w - 1, arrow_w)
+for (rx, rw), left in ((prev_r, True), (next_r, False)):
+    frame_box(strip, rx, 0, rw, STRIP_H)
+    arrow_h(strip, rx + rw // 2, STRIP_H // 2, left, True)
+frame_box(strip, pre_r[0], 0, pre_r[1], STRIP_H)
+strip.text(F["tiny3x5"], "PRESET", pre_r[0] + 4, 5)
+for r_ in range(3):   # caret, down
+    w_ = 5 - 2 * r_
+    strip.fill(pre_r[0] + pre_r[1] - 9 + (5 - w_) // 2, 6 + r_, w_, 1)
+strip_img = strip.image()
+strip_y = OY + 8
+for t_, b_ in enumerate(bgs):
+    b_.paste(strip_img, (strip_x, strip_y))
+    save_png("bg_%d" % t_, b_)   # rewrite: the backgrounds were saved before the strip existed
+name_x_lcd = pre_r[0] + 4 + text_width(F["tiny3x5"], "PRESET") + 4
+name_w_lcd = pre_r[0] + pre_r[1] - 10 - name_x_lcd
+for key_, (rx, rw), left, pk in (("mnmPresetPrev", prev_r, True, "preset_prev"), ("mnmPresetNext", next_r, False, "preset_next")):
+    off = strip_img.crop((rx * S, 0, (rx + rw) * S, STRIP_H * S))
+    onc = Canvas(rw, STRIP_H)
+    onc.fill(0, 0, rw, STRIP_H, True)
+    arrow_h(onc, rw // 2, STRIP_H // 2, left, False)
+    fo, fn_ = save_png(key_ + "_off", off), save_png(key_ + "_on", onc.image())
+    defs[key_] = ss._local(key_, [ss._action("Mouse Down", "Q-Link"), ss._action("Enter Pressed", "Toggle Switch")],
+                           [ss._focus(rw * S, STRIP_H * S), ss._button(fn_, fo, 1, 1, rw * S, STRIP_H * S)])
+    place(key_, pk, PIDX[pk], strip_x + rx * S, strip_y, rw * S, STRIP_H * S, focus="No")
+defs["mnmPresetName"] = ss._local("mnmPresetName", [], [ss._value_label(0, 0, name_w_lcd * S, 11 * S, 30.0, "%02x%02x%02x" % INK, "left verticallyCentred")])
+place("mnmPresetName", "Preset name", PIDX["preset_name"], strip_x + name_x_lcd * S, strip_y + 2 * S, name_w_lcd * S, 11 * S, focus="No")
+# the selector's field is the tap target for nothing yet (a preset list is a later step); the arrows step
 
 # knob cells
 def cell_knobs(page, cells, keys, cond=None, tag=""):
@@ -592,7 +671,7 @@ def cell_knobs(page, cells, keys, cond=None, tag=""):
         kx = x0 + ((k % 4) * CELL + FR_X) * S
         ky = y0 + (GRID_Y + (k // 4) * CELL + FR_Y) * S
         key = knob_def(fn, fw, fh)
-        place(key, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], kx, ky, fw, fh, focus="No" if cond else "Yes", cond=cond, img=fn, raw=p.default)
+        place(key, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], kx, ky, fw, fh, focus="No" if cond else "Yes", cond=cond, img=fn, raw=p.default, tab=TAB_OF[page])
 
 
 for mi, m in enumerate(MACHINES):
@@ -631,18 +710,18 @@ lx, ly = page_origin("LFO23")
 cv3, oy3 = page_canvas("LFO23", lfo_params(), tab=1)
 bar_rows = oy3 + TITLE_H + 1
 fn = save_png("lfotab1", cv3.image().crop((0, 0, LCD_W * S, bar_rows * S)))
-image_comp("LFO3 tab", fn, lx, ly - oy3 * S, LCD_W * S, bar_rows * S, cond=enabling("lfo23tab", 1, 2))
+image_comp("LFO3 tab", fn, lx, ly - oy3 * S, LCD_W * S, bar_rows * S, cond=enabling("lfo23tab", 1, 2), tab=2)
 clear = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
 save_png("clear", clear)
 for t, (tx, tw) in enumerate(tab_rects()):
     key = "mnmTab_%d" % t
     defs[key] = ss._local(key, [ss._action("Mouse Down", "Q-Link")], [ss._button("clear.png", "clear.png", t, 2, tw * S, (oy3 + TITLE_H) * S)])
-    place(key, "LFO tab %d" % (t + 2), PIDX["lfo23tab"], lx + tx * S, ly - oy3 * S, tw * S, (oy3 + TITLE_H) * S, focus="No")
+    place(key, "LFO tab %d" % (t + 2), PIDX["lfo23tab"], lx + tx * S, ly - oy3 * S, tw * S, (oy3 + TITLE_H) * S, focus="No", tab=2)
 
 # LEV: four stacked filmstrip segments of the framed area (LCD x 1..17, y 13..165)
-lev_x, lev_y = OX + 10, OY + 65
-inner_y0, inner_h, seg_n = fy + 2, fh - 4, 4          # 13, 152
-seg_h = inner_h // seg_n                               # 38 rows
+lev_x, lev_y = LEV_X, LEV_Y
+inner_y0, inner_h, seg_n = fy + 2, fh - 4, 4          # 13, 72
+seg_h = inner_h // seg_n                               # 18 rows
 key_lev = []
 for sgm in range(seg_n):
     frames = []
@@ -664,7 +743,7 @@ for sgm in range(seg_n):
     place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x + 1 * S, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S, focus="Yes" if sgm == 0 else "No", img=fn, raw=100)
 
 # machine picker: field over the machine bar toggles machine__open; panel + one image button per machine
-pk_x, pk_y, pk_w, pk_h = OX + 75, OY + 98, 1185, 468
+pk_x, pk_y, pk_w, pk_h = OX + BAR_X_W, OY + TOP - TAB_OVERHANG * S, PAGES_W, 340
 groups = []
 for mi, m in enumerate(MACHINES):
     if not groups or groups[-1]["group"] != m["group"]:
@@ -721,8 +800,8 @@ fn_panel = save_png("pk_panel", panel)
 open_c = enabling("machine__open", 1, 2)
 # the field over the machine bar: a tap toggles the picker
 key = "mnmPickField"
-defs[key] = ss._local(key, [ss._action("Mouse Down", "Toggle Switch"), ss._action("Enter Pressed", "Toggle Switch")], [ss._focus(300, 78)])
-place(key, "Machine picker", PIDX["machine__open"], OX + 75, OY + 8, 300, 78, focus="Yes", extra={"Text": PIDX["machine"]})
+defs[key] = ss._local(key, [ss._action("Mouse Down", "Toggle Switch"), ss._action("Enter Pressed", "Toggle Switch")], [ss._focus(75 * S, BAR_ROWS * S)])
+place(key, "Machine picker", PIDX["machine__open"], OX + BAR_X_W, OY + 8, 75 * S, BAR_ROWS * S, focus="Yes", extra={"Text": PIDX["machine"]})
 parts = []
 pk = "mnmPickPanel"
 defs[pk] = ss._local(pk, [], [ss._sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": fn_panel}, ss._bounds(0, 0, pk_w, pk_h), "Image")])
@@ -747,26 +826,27 @@ for mi, m in enumerate(MACHINES):
 on_top += parts
 
 # ------------------------------------------------------------------ assemble ----------------------------------------
-kids = kids_all + on_top
-SETS = [
-    ("SYN", ["syn%d" % k for k in range(8)] + ["level", "machine"]),
-    ("AMP / FILT", ["amp%d" % k for k in range(8)] + ["filt%d" % k for k in range(8)]),
-    ("EFX / LFO1", ["efx%d" % k for k in range(8)] + ["lfo1_%d" % k for k in range(8)]),
-    ("LFO2 / LFO3", ["lfo2_%d" % k for k in range(8)] + ["lfo3_%d" % k for k in range(8)]),
+TAB_SETS = [   # per tab: the Q-Link pages (nested pages share the picture; each has its own 16 keys)
+    ("SYN / AMP", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)])]),
+    ("FILT / EFX", [("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
+    ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
+             ("LFO3 / MIX", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"])]),
 ]
 pages, qmap = [], []
 comp_bg = {"version": 1, "colour": "ff%02x%02x%02x" % PAPER, "image": ""}
-for sp, (title, keys) in enumerate(SETS):
-    ql = {"Q-Link %d" % (q + 1): -1 for q in range(16)}
-    for s_, k in enumerate(keys):
-        ql["Q-Link %d" % ss.qlink_for_slot(s_)] = PIDX[k]
-    comp = "MONOMODULE|%s" % title
-    pages.append({"version": 3, "tabName": title, "fnKeyIndex": 0, "fnKeySubIndex": sp, "qlinkBoundsData": ["0 0 0 0"],
-                  "componentName": comp, "initialSize": "0 0 %d %d" % (SKIN_W, SKIN_H), "scale": 1.0})
-    qmap.append({"Tab": 1, "SubTab": sp + 1, "Bank Direction": "Column", "Q-Links": ql})
-    defs[comp] = {"key": comp, "value": {"version": 4, "actions": [], "backgroundData": {"version": 1, "focussed": comp_bg, "unfocussed": comp_bg},
-                                         "ignoreMousePresses": False, "disableCoarseDataWheel": False, "repeats": 1,
-                                         "hideQLinkBounds": True, "componentsData": kids}}
+for t, (tab_title, sets) in enumerate(TAB_SETS):
+    kids = TABK[t] + on_top
+    for sp, (title, keys) in enumerate(sets):
+        ql = {"Q-Link %d" % (q + 1): -1 for q in range(16)}
+        for s_, k in enumerate(keys):
+            ql["Q-Link %d" % ss.qlink_for_slot(s_)] = PIDX[k]
+        comp = "MONOMODULE|%s" % title
+        pages.append({"version": 3, "tabName": title, "fnKeyIndex": t, "fnKeySubIndex": sp, "qlinkBoundsData": ["0 0 0 0"],
+                      "componentName": comp, "initialSize": "0 0 %d %d" % (SKIN_W, SKIN_H), "scale": 1.0})
+        qmap.append({"Tab": t + 1, "SubTab": sp + 1, "Bank Direction": "Column", "Q-Links": ql})
+        defs[comp] = {"key": comp, "value": {"version": 4, "actions": [], "backgroundData": {"version": 1, "focussed": comp_bg, "unfocussed": comp_bg},
+                                             "ignoreMousePresses": False, "disableCoarseDataWheel": False, "repeats": 1,
+                                             "hideQLinkBounds": True, "componentsData": kids}}
 tui = {"pageData": {"version": 1, "componentDefinitions": {"version": 2, "importFiles": [ss.AKAI + "Generic/Generic Knob Overlay.json",
                                                                                         ss.AKAI + "Generic/Generic Menu Overlay.json"],
                                                           "localComponentDefinitions": list(defs.values())},
@@ -782,10 +862,12 @@ size = sum(os.path.getsize(os.path.join(SKIN, f)) for f in os.listdir(SKIN))
 print("skin: %s (%d files, %.1f MB)" % (OUT, len(os.listdir(SKIN)), size / 1e6))
 
 
-def preview(state, out):
+def preview(state, out, tab=0):
     """Composite of the skin for one state {param key: option index}: what MPC would draw, at the given values."""
     im = Image.new("RGB", (SKIN_W, SKIN_H), PAPER)
-    for fn, x, y, w, h, cond, raw in PREVIEW:
+    for fn, x, y, w, h, cond, raw, ptab in PREVIEW:
+        if ptab is not None and ptab != tab:
+            continue
         if cond:
             m = re.match(r"IndexedEnabling/(\d+)/(\d+)/Parameter (\d+)", cond)
             i, _, pi = int(m.group(1)), m.group(2), int(m.group(3))
@@ -799,6 +881,7 @@ def preview(state, out):
     im.save(out)
 
 
-for name, st in (("preview_a", {"machine": PREVIEW_MACHINE}), ("preview_open", {"machine": PREVIEW_MACHINE, "machine__open": 1}),
-                 ("preview_lfo3", {"machine": PREVIEW_MACHINE, "lfo23tab": 1, "lfo23dest": 9})):
-    preview(st, os.path.join(sys.argv[3], name + ".png"))
+for t in range(NTABS):
+    preview({"machine": PREVIEW_MACHINE}, os.path.join(sys.argv[3], "preview_tab%d.png" % t), t)
+preview({"machine": PREVIEW_MACHINE, "machine__open": 1}, os.path.join(sys.argv[3], "preview_open.png"), 0)
+preview({"machine": PREVIEW_MACHINE, "lfo23tab": 1, "lfo23dest": 9}, os.path.join(sys.argv[3], "preview_lfo3.png"), 2)

@@ -26,7 +26,7 @@ for l in range(3):
     keys = []
     for k in range(8):
         params.append({"key": "lfo%d_%d" % (l + 1, k), "name": "LFO%d %d" % (l + 1, k + 1), "min": 0, "max": 127,
-                       "default": 0, "display": "int"})
+                       "default": [0, 64, 0, 0, 1, 64, 0, 0][k], "display": "int"})
         keys.append("lfo%d_%d" % (l + 1, k))
     sections.append(("LFO%d" % (l + 1), keys))
 # hidden helper params for the skin, appended after the knobs (never reorder): the machine list's open flag, each LFO's
@@ -38,6 +38,10 @@ for l in range(3):
 params.append({"key": "lfo23tab", "name": "LFO Tab", "options": ["LFO2", "LFO3"], "default": 0})
 PAGES9 = ["PTCH", "SYNT", "AMP", "FILT", "EFFX", "LFO1", "LFO2", "LFO3", "MIDI"]
 params.append({"key": "lfo23dest", "name": "LFO2/3 Dest View", "options": ["%s %s" % (t, p) for t in ("LFO2", "LFO3") for p in PAGES9], "default": 0})
+# presets: prev/next step through this machine's presets (Init first, then the sounds of the dumps); the name is live text
+params.append({"key": "preset_prev", "name": "Preset Prev", "min": 0, "max": 1, "momentary": True})
+params.append({"key": "preset_next", "name": "Preset Next", "min": 0, "max": 1, "momentary": True})
+params.append({"key": "preset_name", "name": "Preset", "min": 0, "max": 0, "display": "string"})
 json.dump({"name": "Monomodule One", "params": params,
            "sections": [{"label": a, "keys": b} for a, b in sections]}, open("params.json", "w"), indent=1)
 print(len(params), "params")

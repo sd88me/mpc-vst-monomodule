@@ -16,7 +16,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <algorithm>
+#include <dirent.h>
 #include <string>
+#include <vector>
 #include <thread>
 
 #include <pthread.h>
@@ -26,6 +29,7 @@
 
 #include "MonoVoice.h"
 #include "firmware/Firmware.h"
+#include "library/MnmDump.h"
 #include "host/Machines.h"
 
 extern "C" {
@@ -67,6 +71,8 @@ int slotOf(const char* key)
         return kSlotLfo + (key[3] - '1') * 8 + (key[5] - '0');
     return -1;
 }
+
+constexpr int kLfoDefaults[8] = {0, 64, 0, 0, 1, 64, 0, 0};   // upstream kLfoParams: PAGE DEST TRIG WAVE MULT SPD INTL DPTH
 
 void defaultsFor(int machineSlot, int* out /*[32] SYN AMP FILT EFX*/)
 {
@@ -117,6 +123,62 @@ int chooseCore()
 
 struct NoteEv { int8_t type; int8_t note; };   // 1 on, 2 off, 3 all off
 
+// Presets: an "Init" per machine, then every synth sound (kit track) of the .syx dumps in <data dir>/dumps, as upstream.
+struct PresetSound {
+    char name[28];
+    int machine;    // host::Machine model
+    int level;
+    uint8_t params[56];   // SYN AMP FILT EFX (32) + LFO 1-3 (24), raw
+};
+struct Catalog { std::vector<PresetSound> sounds; };
+
+Catalog* buildCatalog(const std::string& dir)
+{
+    auto* cat = new Catalog();
+    std::vector<std::string> files;
+    if (DIR* d = opendir(dir.c_str())) {
+        while (dirent* e = readdir(d)) {
+            const size_t n = std::strlen(e->d_name);
+            if (n > 4 && strcasecmp(e->d_name + n - 4, ".syx") == 0) files.push_back(dir + "/" + e->d_name);
+        }
+        closedir(d);
+    }
+    std::sort(files.begin(), files.end());
+    std::vector<std::string> seen;
+    for (const auto& path : files) {
+        FILE* f = std::fopen(path.c_str(), "rb");
+        if (!f) continue;
+        std::vector<uint8_t> data;
+        uint8_t buf[65536];
+        size_t n;
+        while ((n = std::fread(buf, 1, sizeof buf, f)) > 0 && data.size() < (64u << 20)) data.insert(data.end(), buf, buf + n);
+        std::fclose(f);
+        mnm::dump::Dump dump;
+        try { dump = mnm::dump::parseDump(data.data(), data.size(), path); } catch (...) { continue; }
+        for (const auto& kit : dump.kits) {
+            if (kit.isEmptySlot()) continue;
+            for (int t = 0; t < 6; ++t) {
+                const auto& tr = kit.tracks[t];
+                bool ours = false;
+                for (auto m : kMachines) if (int(m) == tr.model) ours = true;
+                if (!ours || tr.model == int(host::Machine::GND)) continue;
+                std::string key(reinterpret_cast<const char*>(tr.params), 56);
+                key += char(tr.model); key += char(tr.level);
+                if (std::find(seen.begin(), seen.end(), key) != seen.end()) continue;
+                seen.push_back(key);
+                PresetSound snd{};
+                std::snprintf(snd.name, sizeof snd.name, "%s %d", kit.name.c_str(), t + 1);
+                snd.machine = tr.model;
+                snd.level = std::min<int>(tr.level, 127);
+                std::memcpy(snd.params, tr.params, 56);
+                for (auto& b : snd.params) b = std::min<uint8_t>(b, 127);
+                cat->sounds.push_back(snd);
+            }
+        }
+    }
+    return cat;
+}
+
 struct Inst {
     std::string osPath;
     std::atomic<int> param[kNumSlots];
@@ -128,18 +190,75 @@ struct Inst {
     // audio ring (DSP thread -> host)
     alignas(64) int16_t ring[kRing][kFrames * 2];
     std::atomic<uint32_t> rWrite{0}, rRead{0};
-    std::thread th;
+    std::thread th, catTh;
+    std::atomic<Catalog*> cat{nullptr};
+    int presetIdx = 0;               // 0 = Init, k = the machine's k-th sound; control thread only
+    int snap[kNumSlots] = {};        // the loaded preset's values (slots 1..57), to tell "modified"
+    std::string dumpsDir;
     int core = -1;
     FILE* trace = nullptr;   // /tmp/mnm_trace.on present at create: log every set/get to /tmp/mnm_trace.log
 
     Inst()
     {
         for (auto& p : param) p.store(0);
-        param[kSlotLevel].store(100);
+        loadInit(4);   // SWAVE SAW, as upstream One
+    }
+    ~Inst() { delete cat.load(); }
+    // Init of a machine: its page defaults, default LFOs and level 100.
+    void loadInit(int machineSlot)
+    {
         int d[32];
-        defaultsFor(4, d);   // SWAVE SAW, as upstream One
-        param[kSlotMachine].store(4);
+        defaultsFor(machineSlot, d);
+        param[kSlotMachine].store(machineSlot);
+        param[kSlotLevel].store(100);
         for (int i = 0; i < 32; ++i) param[kSlotPages + i].store(d[i]);
+        for (int i = 0; i < 24; ++i) param[kSlotLfo + i].store(kLfoDefaults[i % 8]);
+        presetIdx = 0;
+        markLoaded();
+    }
+    void markLoaded() { for (int i = 1; i < kSlotTab; ++i) snap[i] = param[i].load(); }
+    bool modified() const
+    {
+        for (int i = 1; i < kSlotTab; ++i) if (param[i].load() != snap[i]) return true;
+        return false;
+    }
+    // the sounds for a machine, sorted by name
+    std::vector<int> soundsFor(int model) const
+    {
+        std::vector<int> out;
+        if (const Catalog* c = cat.load()) {
+            for (size_t i = 0; i < c->sounds.size(); ++i) if (c->sounds[i].machine == model) out.push_back(int(i));
+            std::sort(out.begin(), out.end(), [c](int a, int b) { return strcasecmp(c->sounds[size_t(a)].name, c->sounds[size_t(b)].name) < 0; });
+        }
+        return out;
+    }
+    void stepPreset(int dir)
+    {
+        const int ms = param[kSlotMachine].load();
+        const auto list = soundsFor(int(kMachines[ms]));
+        const int n = 1 + int(list.size());
+        int idx = (presetIdx + dir) % n;
+        if (idx < 0) idx += n;
+        if (idx == 0) { loadInit(ms); return; }
+        const Catalog* c = cat.load();
+        const auto& snd = c->sounds[size_t(list[size_t(idx - 1)])];
+        for (int i = 0; i < 32; ++i) param[kSlotPages + i].store(snd.params[i]);
+        for (int i = 0; i < 24; ++i) param[kSlotLfo + i].store(snd.params[32 + i]);
+        param[kSlotLevel].store(snd.level);
+        presetIdx = idx;
+        markLoaded();
+    }
+    std::string presetName() const
+    {
+        const int ms = param[kSlotMachine].load();
+        std::string name = "INIT";
+        if (presetIdx > 0) {
+            const auto list = soundsFor(int(kMachines[ms]));
+            const Catalog* c = cat.load();
+            if (presetIdx - 1 < int(list.size())) name = c->sounds[size_t(list[size_t(presetIdx - 1)])].name;
+        }
+        for (auto& ch : name) ch = char(toupper(static_cast<unsigned char>(ch)));
+        return modified() ? name + " *" : name;
     }
     void pushNote(int8_t t, int8_t n)
     {
@@ -267,6 +386,8 @@ void* eCreate(const char* dataDir)
     if (access("/tmp/mnm_trace.on", F_OK) == 0) in->trace = std::fopen("/tmp/mnm_trace.log", "a");
     if (const char* p = std::getenv("MNM_OS")) in->osPath = p;
     else in->osPath = std::string(dataDir && *dataDir ? dataDir : ".") + "/Elektron_SFX6-60_OS1.32B.syx";
+    in->dumpsDir = std::string(dataDir && *dataDir ? dataDir : ".") + "/dumps";
+    in->catTh = std::thread([in] { in->cat.store(buildCatalog(in->dumpsDir)); });
     in->th = std::thread([in] { in->run(); });
     return in;
 }
@@ -275,6 +396,7 @@ void eDestroy(void* p)
     auto* in = static_cast<Inst*>(p);
     in->stop.store(true);
     if (in->th.joinable()) in->th.join();
+    if (in->catTh.joinable()) in->catTh.join();
     if (in->core >= 0) g_usedCores.fetch_and(~(1u << in->core));
     delete in;
 }
@@ -290,6 +412,10 @@ void eMidi(void* p, const uint8_t* m, int len)
 void eSet(void* p, const char* key, const char* val)
 {
     auto* in = static_cast<Inst*>(p);
+    if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) {
+        if (std::atof(val) > 0.5) in->stepPreset(key[7] == 'n' ? 1 : -1);
+        return;
+    }
     if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && !std::strcmp(key + 4, "_pagesel")) {
         const int idx = std::clamp(int(std::lround(std::atof(val))), 0, 8);
         in->param[kSlotLfo + (key[3] - '1') * 8].store(listRawMid9(idx));
@@ -306,6 +432,8 @@ void eSet(void* p, const char* key, const char* val)
         defaultsFor(m, d);
         for (int i = 0; i < 32; ++i) in->param[kSlotPages + i].store(d[i]);
         in->param[kSlotMachine].store(m);
+        in->presetIdx = 0;   // a new machine starts from its Init
+        in->markLoaded();
         return;
     }
     in->param[s].store(std::clamp(v, 0, 127));
@@ -313,6 +441,8 @@ void eSet(void* p, const char* key, const char* val)
 int eGet(void* p, const char* key, char* buf, int len)
 {
     auto* in = static_cast<Inst*>(p);
+    if (!std::strcmp(key, "preset_name")) return std::snprintf(buf, size_t(len), "%s", in->presetName().c_str());
+    if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "lfo23dest")) {   // DEST's view of the LFO2|LFO3 page: tab * 9 + that LFO's PAGE list index
         const int tab = std::clamp(in->param[kSlotTab].load(), 0, 1);
         return std::snprintf(buf, size_t(len), "%d", tab * 9 + listIndex9(in->param[kSlotLfo + (1 + tab) * 8].load()));
