@@ -739,6 +739,24 @@ place("mnmPresetName", "Preset name", PIDX["preset_name"], strip_x + name_x_lcd 
 # the selector's field is the tap target for nothing yet (a preset list is a later step); the arrows step
 
 # knob cells
+TOUCH_INSET = 2                                     # LCD px kept clear at the cell's edges
+TOUCH_W, TOUCH_H = (CW - 2 * TOUCH_INSET) * S, (CELL - 2 * TOUCH_INSET) * S
+_touch_png = []
+
+
+def touch_file():
+    """An invisible filmstrip: a knob using it takes the whole cell's touch while the cell's real knob only draws."""
+    if not _touch_png:
+        _touch_png.append(save_png("touch", Image.new("RGBA", (8, 8 * FRAMES), (0, 0, 0, 0))))
+    return _touch_png[0]
+
+
+def touch_knob(page, name, index, x0, y0, cond, tab):
+    """Invisible knob over a cell (x0, y0 = the cell's top-left in skin px): press and drag anywhere except its edges."""
+    kd = knob_def(touch_file(), TOUCH_W, TOUCH_H)
+    place(kd, "%s touch" % name, index, x0 + TOUCH_INSET * S, y0 + TOUCH_INSET * S, TOUCH_W, TOUCH_H, focus="No", cond=cond, tab=tab)
+
+
 def cell_knobs(page, cells, keys, cond=None, tag=""):
     x0, y0 = page_origin(page)
     for k, p in enumerate(cells):
@@ -749,6 +767,7 @@ def cell_knobs(page, cells, keys, cond=None, tag=""):
         ky = y0 + (GRID_Y + (k // 4) * CELL + FR_Y) * S
         key = knob_def(fn, fw, fh)
         place(key, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], kx, ky, fw, fh, focus="No" if cond else "Yes", cond=cond, img=fn, raw=p.default, tab=TAB_OF[page])
+        touch_knob(page, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], x0 + (k % 4) * CW * S, y0 + (GRID_Y + (k // 4) * CELL) * S, cond, TAB_OF[page])
 
 
 for mi, m in enumerate(MACHINES):
@@ -833,6 +852,10 @@ if LEVQ:
         kd = knob_def(fn, 17 * S, seg_h * S)
         place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S,
               focus="Yes" if sgm == 0 else "No", img=fn, raw=100, tab=TAB_OF["GLOBAL"])
+    lev_tw, lev_th = TOUCH_W, 2 * CELL * S - 2 * TOUCH_INSET * S     # the whole LEV cell column takes the drag
+    fn_t = save_png("touch_lev", Image.new("RGBA", (8, 8 * FRAMES), (0, 0, 0, 0)))
+    place(knob_def(fn_t, lev_tw, lev_th), "LEV touch", PIDX["level"], qx + TOUCH_INSET * S, qy + (body_y + TOUCH_INSET) * S, lev_tw, lev_th,
+          focus="No", tab=TAB_OF["GLOBAL"])
     # master tune: a dial cell (its value row shows Hz); LPF/HPF key tracking: two-state buttons drawn as the LCD's toggle cells
     if not FXV:
         cell_knobs("GLOBAL", GLOBAL_CELLS, ["level", "master_tune", "lpf_key", "hpf_key", "level", "level", "level", "level"])
@@ -849,6 +872,13 @@ if LEVQ:
                               [ss._focus(w_, h_), ss._button(imgs["on"], imgs["off"], 1, 1, w_, h_)])
         place(key, p_.label, PIDX[key_p], qx + ((k_ % 4) * CW + FR_X) * S, qy + (GRID_Y + (k_ // 4) * CELL + FR_Y) * S, w_, h_,
               focus="Yes", tab=TAB_OF["GLOBAL"], img=imgs["on"])
+        tkey = "mnmToggleTouch"      # the whole cell toggles: a transparent two-state button over it
+        if tkey not in defs:
+            save_png("clear", Image.new("RGBA", (8, 8), (0, 0, 0, 0)))
+            defs[tkey] = ss._local(tkey, [ss._action("Mouse Down", "Q-Link"), ss._action("Enter Pressed", "Toggle Switch")],
+                                   [ss._focus(TOUCH_W, TOUCH_H), ss._button("clear.png", "clear.png", 1, 1, TOUCH_W, TOUCH_H)])
+        place(tkey, "%s touch" % p_.label, PIDX[key_p], qx + ((k_ % 4) * CW + TOUCH_INSET) * S, qy + (GRID_Y + (k_ // 4) * CELL + TOUCH_INSET) * S,
+              TOUCH_W, TOUCH_H, focus="No", tab=TAB_OF["GLOBAL"])
 elif not GRID:
     # LEV, horizontal under the preset strip (upstream's LEV column turned on its side): "LEV", a dotted frame, a solid level bar
     LEV_ROWS = BAR_ROWS - STRIP_H - 1       # 10: the strip + LEV are as tall as the machine block
