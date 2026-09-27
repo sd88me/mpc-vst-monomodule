@@ -205,6 +205,15 @@ checkpoint, not just at the end.
   Plugin-list entry: `vst/fx/build/pluginlist-entry.xml` (category Effect, uid 4d6e6d46). Untested in MPC: effect insertion,
   wrapper's aligned/unaligned block paths, latency feel.
 
+- **2026-09-27: Q-Link bug reproduced and (probably) fixed -- caused by our own touch-overlay change, not the earlier mystery.**
+  The whole-cell touch overlay put TWO interactive Knob/Button components on the same parameter index in one page (the visible
+  knob/toggle plus the invisible touch one), each with its own Q-Link binding. That confused MPC's Q-Link handling exactly like
+  the earlier "climbs then resets" symptom -- so the two bugs may always have been the same thing, not two separate ones.
+  Fix: the visible knob/toggle is now display-only (no actions, no HW focus); only the touch overlay is interactive, so each
+  parameter has exactly one Q-Link-bound component again. Installed on both plugins; **not yet re-tested on the device**, ask
+  the user to confirm before considering this closed. If it recurs, search for any other place a parameter has two placed
+  components in the same page's componentsData.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.

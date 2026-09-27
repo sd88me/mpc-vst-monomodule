@@ -299,15 +299,20 @@ TABK = [[] for _ in range(NTABS)]   # components per tab (tab=None on place()/im
 PREVIEW = []   # (image file, x, y, w, h, condition, frame index or None), in draw order, for the offline composite
 
 
-def knob_def(fn, w, h, orient="Vertical"):
-    key = "mnmKnob_%s" % fn[:-4]
+def knob_def(fn, w, h, orient="Vertical", interactive=True):
+    """interactive=False: draws the filmstrip only, no Q-Link/overlay actions and no HW-focus outline -- used once a
+    separate touch overlay (touch_knob) owns the cell's Q-Link binding, so the parameter has exactly one interactive
+    component (two Knob components on the same Parameter N confused MPC's Q-Link handling: turning one knob could
+    reset another's position -- see HANDOFF/NOTES)."""
+    key = "mnmKnob_%s%s" % (fn[:-4], "" if interactive else "_d")
     if key not in defs:
-        defs[key] = ss._local(key, [ss._action("Mouse Down", "Q-Link"), ss._action("Double Click", "Show Overlay", "knob overlay"),
-                                    ss._action("Enter Pressed", "Show Overlay", "knob overlay")],
-                              [ss._focus(w, h),
-                               ss._sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": fn, "numFrames": FRAMES - 1,
-                                                "invert": False, "dragOrientation": orient, "handleName": "Data"},
-                                       ss._bounds(0, 0, w, h), "Knob")])
+        actions = [ss._action("Mouse Down", "Q-Link"), ss._action("Double Click", "Show Overlay", "knob overlay"),
+                   ss._action("Enter Pressed", "Show Overlay", "knob overlay")] if interactive else []
+        children = ([ss._focus(w, h)] if interactive else []) + [
+            ss._sub("Knob", {"version": 5, "knobType": "FilmStrip", "filmStrip": fn, "numFrames": FRAMES - 1,
+                             "invert": False, "dragOrientation": orient, "handleName": "Data"},
+                    ss._bounds(0, 0, w, h), "Knob")]
+        defs[key] = ss._local(key, actions, children)
     return key
 
 
@@ -765,8 +770,8 @@ def cell_knobs(page, cells, keys, cond=None, tag=""):
         fn, fw, fh = strip_image(p)
         kx = x0 + ((k % 4) * CW + FR_X) * S
         ky = y0 + (GRID_Y + (k // 4) * CELL + FR_Y) * S
-        key = knob_def(fn, fw, fh)
-        place(key, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], kx, ky, fw, fh, focus="No" if cond else "Yes", cond=cond, img=fn, raw=p.default, tab=TAB_OF[page])
+        key = knob_def(fn, fw, fh, interactive=False)
+        place(key, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], kx, ky, fw, fh, focus="No", cond=cond, img=fn, raw=p.default, tab=TAB_OF[page])
         touch_knob(page, "%s %s%s" % (page, p.label, tag), PIDX[keys[k]], x0 + (k % 4) * CW * S, y0 + (GRID_Y + (k // 4) * CELL) * S, cond, TAB_OF[page])
 
 
@@ -849,9 +854,9 @@ if LEVQ:
         for i_, f_ in enumerate(frames):
             st.paste(f_, (0, i_ * seg_h * S))
         fn = save_png("lev_%d" % sgm, st)
-        kd = knob_def(fn, 17 * S, seg_h * S)
+        kd = knob_def(fn, 17 * S, seg_h * S, interactive=False)
         place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S,
-              focus="Yes" if sgm == 0 else "No", img=fn, raw=100, tab=TAB_OF["GLOBAL"])
+              focus="No", img=fn, raw=100, tab=TAB_OF["GLOBAL"])
     lev_tw, lev_th = TOUCH_W, 2 * CELL * S - 2 * TOUCH_INSET * S     # the whole LEV cell column takes the drag
     fn_t = save_png("touch_lev", Image.new("RGBA", (8, 8 * FRAMES), (0, 0, 0, 0)))
     place(knob_def(fn_t, lev_tw, lev_th), "LEV touch", PIDX["level"], qx + TOUCH_INSET * S, qy + (body_y + TOUCH_INSET) * S, lev_tw, lev_th,
@@ -867,11 +872,10 @@ if LEVQ:
             cell_dynamic(cv, -FR_X, -FR_Y, p_, raw)
             imgs[state] = save_png("tog_%s_%s" % (key_p, state), cv.image())
         w_, h_ = FR_W * S, FR_H * S
-        key = "mnmToggle_%s" % key_p
-        defs[key] = ss._local(key, [ss._action("Mouse Down", "Q-Link"), ss._action("Enter Pressed", "Toggle Switch")],
-                              [ss._focus(w_, h_), ss._button(imgs["on"], imgs["off"], 1, 1, w_, h_)])
+        key = "mnmToggle_%s" % key_p          # display only: the touch overlay below owns the Q-Link/toggle actions
+        defs[key] = ss._local(key, [], [ss._button(imgs["on"], imgs["off"], 1, 1, w_, h_)])
         place(key, p_.label, PIDX[key_p], qx + ((k_ % 4) * CW + FR_X) * S, qy + (GRID_Y + (k_ // 4) * CELL + FR_Y) * S, w_, h_,
-              focus="Yes", tab=TAB_OF["GLOBAL"], img=imgs["on"])
+              focus="No", tab=TAB_OF["GLOBAL"], img=imgs["on"])
         tkey = "mnmToggleTouch"      # the whole cell toggles: a transparent two-state button over it
         if tkey not in defs:
             save_png("clear", Image.new("RGBA", (8, 8), (0, 0, 0, 0)))
