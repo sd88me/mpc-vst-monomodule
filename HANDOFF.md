@@ -274,6 +274,17 @@ checkpoint, not just at the end.
   order) and previewed + confirmed before deploying this time. Installed on the Force, both plugins. Not yet
   device-tested by the user.
 
+- **2026-09-27: build made fully self-contained (user request: "Fix now").** Vendored `vst/engine/`
+  (MonoVoice/DspEngine from legsmechanical/schwung-monomodule commit `bcbff13`, AGPLv3; see
+  `vst/engine/VENDORED.md`), added a repo-root `CMakeLists.txt` + `cmake/dsp56300.cmake` building
+  `monomodule_one`/`monomodule_fx` from just this repo's own submodules, and `tools/armhf.cmake` +
+  `tools/Dockerfile.armhf-builder`. `vst/build_so.sh` now takes two arguments (recomp dir, mpc-vst
+  checkout) instead of four -- no external scratchpad glue tree needed. Found and fixed two build
+  issues along the way: `libs/dsp56300`'s `asmjit` is itself a submodule and needs `--init --recursive`;
+  `dsp56kEmu` links `vtuneSdk` unconditionally on Linux, which our trimmed `dsp56300.cmake` initially
+  omitted. Verified: clean build end to end, smoke-tested on the Force (numbers match prior
+  measurements), deployed. README's install section and background section updated to match.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
