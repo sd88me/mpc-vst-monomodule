@@ -182,6 +182,11 @@ checkpoint, not just at the end.
   (`vst/skin/ram_estimate.py`): tabs 209 MB, 2x2 156 MB, grid 182 MB; MPC's RSS with one instance loaded was 922 MB in both the
   3x and the 4x skins (so images are not all resident; not yet measured without an instance).
 
+- **2026-09-27: `layout=2x2` now = header on top (logo, machine block, preset strip), four pages per tab at 3x, and LEV vertical in
+  the free quadrant beside LFO3 (GLOBAL quadrant, room for more globals: e.g. master tune, LPF/HPF key tracking).** Cell width
+  defaults to upstream's 32 (crisp; only ~786 of 1280 px wide); `cellw=40..51` widens cells to fill the width. `layout=grid` and
+  `layout=tabs` remain. Not installed on the Force yet: the user has not picked layout/colour.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.

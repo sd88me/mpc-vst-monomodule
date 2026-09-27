@@ -51,13 +51,14 @@ LAYOUT = args.get("layout", "tabs")   # "tabs": two pages per tab at 4x (LFO2|LF
 #   "grid": four quadrants per tab at 4x with upstream's own cell size; the machine block/preset strip take a quadrant, LEV a left column
 TABS = LAYOUT == "tabs"
 GRID = LAYOUT == "grid"
+LEVQ = LAYOUT == "2x2" and args.get("level", "quadrant") == "quadrant"   # 2x2: LEV stands vertical in the free quadrant beside LFO3
 S = int(args.get("scale", "3" if LAYOUT == "2x2" else "4"))   # screen px per LCD px (upstream draws at 3)
 SKIN_W, SKIN_H = 1280, 628
 CELL, LABEL_Y, CONTENT_Y, CONTENT_H, VALUE_Y, VALUE_H = 32, 3, 9, 14, 23, 9
 TITLE_H, GRID_Y = 10, 11
 MARG, GAPX, BAR_ROWS, PAGE_GAP = 10, 8, 26, (8 if GRID else 12)
 # cell width in LCD px (upstream 32): wider cells use the whole width; the default fills the skin
-CW = int(args.get("cellw", "32" if GRID else str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
+CW = int(args.get("cellw", "32" if (GRID or LAYOUT == "2x2") else str(((SKIN_W - 2 * MARG - PAGE_GAP) // 2 // S - 1) // 4)))
 LCD_W = 4 * CW + 1                          # a page (upstream 129)
 PAGE_LCD_H = GRID_Y + 2 * CELL + 1      # 76
 TAB_OVERHANG = 2 if TABS else 0
@@ -350,6 +351,8 @@ elif GRID:
 else:
     PAGE_POS = {"SYN": (0, 0), "AMP": (1, 0), "FILT": (0, 1), "EFX": (1, 1), "LFO1": (0, 0), "LFO2": (1, 0), "LFO3": (0, 1)}
     TAB_OF = {"SYN": 0, "AMP": 0, "FILT": 0, "EFX": 0, "LFO1": 1, "LFO2": 1, "LFO3": 1}
+    if LEVQ:
+        PAGE_POS["GLOBAL"], TAB_OF["GLOBAL"] = (1, 1), 1
     PAGE_TITLE = {n: n for n in PAGE_POS}
 
 
@@ -614,14 +617,14 @@ for name, cells in PAGE_CELLS.items():
     cv, oy = page_canvas(name, cells)
     x, y = page_origin(name)
     bgs[TAB_OF[name]].paste(cv.image(), (x, y - oy * S))
-if GRID:   # the machine block + preset strip's quadrant: a title bar and a dotted body, like the pages
+if GRID or LEVQ:   # the GLOBAL quadrant: a title bar and a dotted body, like the pages
     gcv = Canvas(LCD_W, PAGE_LCD_H)
     gcv.fill(0, 0, LCD_W, TITLE_H, True)
     gcv.text(F["bold8"], "GLOBAL", 2, 1, False)
     gcv.dots_h(0, LCD_W - 1, GRID_Y); gcv.dots_h(0, LCD_W - 1, PAGE_LCD_H - 1)
     gcv.dots_v(0, GRID_Y, PAGE_LCD_H - 1); gcv.dots_v(LCD_W - 1, GRID_Y, PAGE_LCD_H - 1)
     gx_, gy_ = page_origin("GLOBAL")
-    bgs[0].paste(gcv.image(), (gx_, gy_))
+    bgs[TAB_OF["GLOBAL"]].paste(gcv.image(), (gx_, gy_))
 for t, b_ in enumerate(bgs):
     image_comp("Background", save_png("bg_%d" % t, b_), 0, 0, SKIN_W, SKIN_H, tab=t)
 
@@ -681,7 +684,7 @@ for r_ in range(3):   # caret, down
     w_ = 5 - 2 * r_
     strip.fill(pre_r[0] + pre_r[1] - 9 + (5 - w_) // 2, 6 + r_, w_, 1)
 strip_img = strip.image()
-strip_y = _gy + (12 + BAR_ROWS + 3) * S if GRID else OY + 8
+strip_y = _gy + (12 + BAR_ROWS + 3) * S if GRID else OY + 8 + ((BAR_ROWS - STRIP_H) // 2 * S if LEVQ else 0)
 for t_, b_ in enumerate(bgs):
     if GRID and t_ != 0:
         continue
@@ -761,7 +764,42 @@ if TABS:
         place(key, "LFO tab %d" % (t + 2), PIDX["lfo23tab"], lx + tx * S, ly - oy3 * S, tw * S, (oy3 + TITLE_H) * S, focus="No", tab=2)
 
 
-if not GRID:
+if LEVQ:
+    # LEV as upstream's column (label, dotted frame, solid bar), standing in the GLOBAL quadrant's body
+    qx, qy = page_origin("GLOBAL")
+    body_y = GRID_Y + 1                                       # first row under the body's top edge
+    lv = Canvas(19, PAGE_LCD_H - body_y)
+    lv.text_centred(F["bold8"], "LEV", 0, 19, 0)
+    fy_ = 10
+    rows_ = PAGE_LCD_H - body_y
+    lv.dots_h(0, 18, fy_); lv.dots_h(0, 18, rows_ - 1); lv.dots_v(0, fy_, rows_ - 1); lv.dots_v(18, fy_, rows_ - 1)
+    lev_x, lev_y = qx + 6 * S, qy + body_y * S
+    for t_ in range(NTABS):
+        if t_ == TAB_OF["GLOBAL"]:
+            bgs[t_].paste(lv.image(), (lev_x, lev_y))
+        save_png("bg_%d" % t_, bgs[t_])
+    inner_y0 = fy_ + 2
+    seg_n = 2
+    seg_h = (rows_ - 1 - inner_y0 - 1) // seg_n
+    inner_h = seg_h * seg_n
+    for sgm in range(seg_n):
+        frames = []
+        for raw in range(FRAMES):
+            cv = Canvas(17, seg_h)
+            lvl = int(round(raw / 127.0 * inner_h))
+            for r in range(seg_h):
+                if inner_y0 + sgm * seg_h + r >= inner_y0 + inner_h - lvl:
+                    for c in range(1, 7):
+                        cv.set(c, r)
+            frames.append(cv.image())
+        st = Image.new("RGB", (17 * S, seg_h * S * FRAMES))
+        for i_, f_ in enumerate(frames):
+            st.paste(f_, (0, i_ * seg_h * S))
+        fn = save_png("lev_%d" % sgm, st)
+        kd = knob_def(fn, 17 * S, seg_h * S)
+        place(kd, "LEV %d" % (sgm + 1), PIDX["level"], lev_x + S, lev_y + (inner_y0 + sgm * seg_h) * S, 17 * S, seg_h * S,
+              focus="Yes" if sgm == 0 else "No", img=fn, raw=100, tab=TAB_OF["GLOBAL"])
+elif not GRID:
     # LEV, horizontal under the preset strip (upstream's LEV column turned on its side): "LEV", a dotted frame, a solid level bar
     LEV_ROWS = BAR_ROWS - STRIP_H - 1       # 10: the strip + LEV are as tall as the machine block
     lev_y = strip_y + (STRIP_H + 1) * S
