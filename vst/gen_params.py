@@ -29,6 +29,15 @@ for l in range(3):
                        "default": 0, "display": "int"})
         keys.append("lfo%d_%d" % (l + 1, k))
     sections.append(("LFO%d" % (l + 1), keys))
+# hidden helper params for the skin, appended after the knobs (never reorder): the machine list's open flag, each LFO's
+# PAGE list index (DEST's names follow it) and the LFO2|LFO3 tab
+params.append({"key": "machine__open", "name": "Machine List", "options": ["Closed", "Open"], "default": 0, "popup_of": "machine"})
+for l in range(3):
+    params.append({"key": "lfo%d_pagesel" % (l + 1), "name": "LFO%d Page" % (l + 1),
+                   "options": ["PTCH", "SYNT", "AMP", "FILT", "EFFX", "LFO1", "LFO2", "LFO3", "MIDI"], "default": 0})
+params.append({"key": "lfo23tab", "name": "LFO Tab", "options": ["LFO2", "LFO3"], "default": 0})
+PAGES9 = ["PTCH", "SYNT", "AMP", "FILT", "EFFX", "LFO1", "LFO2", "LFO3", "MIDI"]
+params.append({"key": "lfo23dest", "name": "LFO2/3 Dest View", "options": ["%s %s" % (t, p) for t in ("LFO2", "LFO3") for p in PAGES9], "default": 0})
 json.dump({"name": "Monomodule One", "params": params,
            "sections": [{"label": a, "keys": b} for a, b in sections]}, open("params.json", "w"), indent=1)
 print(len(params), "params")

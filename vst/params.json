@@ -478,6 +478,98 @@
    "max": 127,
    "default": 0,
    "display": "int"
+  },
+  {
+   "key": "machine__open",
+   "name": "Machine List",
+   "options": [
+    "Closed",
+    "Open"
+   ],
+   "default": 0,
+   "popup_of": "machine"
+  },
+  {
+   "key": "lfo1_pagesel",
+   "name": "LFO1 Page",
+   "options": [
+    "PTCH",
+    "SYNT",
+    "AMP",
+    "FILT",
+    "EFFX",
+    "LFO1",
+    "LFO2",
+    "LFO3",
+    "MIDI"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo2_pagesel",
+   "name": "LFO2 Page",
+   "options": [
+    "PTCH",
+    "SYNT",
+    "AMP",
+    "FILT",
+    "EFFX",
+    "LFO1",
+    "LFO2",
+    "LFO3",
+    "MIDI"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo3_pagesel",
+   "name": "LFO3 Page",
+   "options": [
+    "PTCH",
+    "SYNT",
+    "AMP",
+    "FILT",
+    "EFFX",
+    "LFO1",
+    "LFO2",
+    "LFO3",
+    "MIDI"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo23tab",
+   "name": "LFO Tab",
+   "options": [
+    "LFO2",
+    "LFO3"
+   ],
+   "default": 0
+  },
+  {
+   "key": "lfo23dest",
+   "name": "LFO2/3 Dest View",
+   "options": [
+    "LFO2 PTCH",
+    "LFO2 SYNT",
+    "LFO2 AMP",
+    "LFO2 FILT",
+    "LFO2 EFFX",
+    "LFO2 LFO1",
+    "LFO2 LFO2",
+    "LFO2 LFO3",
+    "LFO2 MIDI",
+    "LFO3 PTCH",
+    "LFO3 SYNT",
+    "LFO3 AMP",
+    "LFO3 FILT",
+    "LFO3 EFFX",
+    "LFO3 LFO1",
+    "LFO3 LFO2",
+    "LFO3 LFO3",
+    "LFO3 MIDI"
+   ],
+   "default": 0
   }
  ],
  "sections": [

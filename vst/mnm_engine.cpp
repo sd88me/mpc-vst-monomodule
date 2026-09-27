@@ -47,7 +47,11 @@ constexpr host::Machine kMachines[kNumMachines] = {
     host::Machine::FM_STAT, host::Machine::FM_PAR, host::Machine::FM_DYN, host::Machine::VO6};
 
 // parameter slots: 0 machine, 1 level, 2.. = 4 pages x 8, then 3 LFOs x 8
-constexpr int kSlotMachine = 0, kSlotLevel = 1, kSlotPages = 2, kSlotLfo = 34, kNumSlots = 58;
+constexpr int kSlotMachine = 0, kSlotLevel = 1, kSlotPages = 2, kSlotLfo = 34, kSlotTab = 58, kNumSlots = 59;
+// lfoN_pagesel (N = 1..3) is the list index of that LFO's PAGE knob (raw 0..127 in 9 unequal buckets), so the skin
+// can show DEST's names for the page; setting it moves PAGE to that list entry's middle.
+constexpr int listIndex9(int raw) { return ((2 * raw + 1) * 9) >> 8; }
+constexpr int listRawMid9(int idx) { return (idx * 256 + 128) / 18; }
 
 int slotOf(const char* key)
 {
@@ -58,6 +62,7 @@ int slotOf(const char* key)
         const size_t n = std::strlen(pages[p]);
         if (!std::strncmp(key, pages[p], n) && key[n] >= '0' && key[n] <= '7' && !key[n + 1]) return kSlotPages + p * 8 + (key[n] - '0');
     }
+    if (!std::strcmp(key, "lfo23tab")) return kSlotTab;   // the LFO2 | LFO3 tab of the skin: skin state only
     if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && key[4] == '_' && key[5] >= '0' && key[5] <= '7' && !key[6])
         return kSlotLfo + (key[3] - '1') * 8 + (key[5] - '0');
     return -1;
@@ -285,6 +290,11 @@ void eMidi(void* p, const uint8_t* m, int len)
 void eSet(void* p, const char* key, const char* val)
 {
     auto* in = static_cast<Inst*>(p);
+    if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && !std::strcmp(key + 4, "_pagesel")) {
+        const int idx = std::clamp(int(std::lround(std::atof(val))), 0, 8);
+        in->param[kSlotLfo + (key[3] - '1') * 8].store(listRawMid9(idx));
+        return;
+    }
     const int s = slotOf(key);
     if (s < 0) return;
     const int v = int(std::lround(std::atof(val)));
@@ -303,6 +313,12 @@ void eSet(void* p, const char* key, const char* val)
 int eGet(void* p, const char* key, char* buf, int len)
 {
     auto* in = static_cast<Inst*>(p);
+    if (!std::strcmp(key, "lfo23dest")) {   // DEST's view of the LFO2|LFO3 page: tab * 9 + that LFO's PAGE list index
+        const int tab = std::clamp(in->param[kSlotTab].load(), 0, 1);
+        return std::snprintf(buf, size_t(len), "%d", tab * 9 + listIndex9(in->param[kSlotLfo + (1 + tab) * 8].load()));
+    }
+    if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && !std::strcmp(key + 4, "_pagesel"))
+        return std::snprintf(buf, size_t(len), "%d", listIndex9(in->param[kSlotLfo + (key[3] - '1') * 8].load()));
     const int s = slotOf(key);
     if (s >= 0) {
         const int n = std::snprintf(buf, size_t(len), "%d", in->param[s].load());
