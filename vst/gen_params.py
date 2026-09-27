@@ -49,6 +49,11 @@ params.append({"key": "preset_next", "name": "Preset Next", "min": 0, "max": 1, 
 params.append({"key": "preset_name", "name": "Preset", "min": 0, "max": 0, "display": "string"})
 # globals (not part of a preset): master tune in Hz and the filter key tracking of the hardware's KIT > ASSIGN > KEY
 if not FX:
+  # randomise (momentary; the wrapper springs it back to 0/OFF after firing -- see docs/PORTING.md's "step_of" note
+  # for the mechanism). SYN excludes H (TUNE on every pitched machine); AMP+FILT excludes AMP VOL; LFO1+LFO2 has no exceptions.
+  params.append({"key": "randomize_syn", "name": "Randomise SYN", "options": ["OFF", "ON"], "default": 0, "momentary": True})
+  params.append({"key": "randomize_ampfilt", "name": "Randomise AMP/FILT", "options": ["OFF", "ON"], "default": 0, "momentary": True})
+  params.append({"key": "randomize_lfo", "name": "Randomise LFO1/2", "options": ["OFF", "ON"], "default": 0, "momentary": True})
   params.append({"key": "master_tune", "name": "Master Tune", "min": 400, "max": 440, "default": 440, "unit": "Hz", "display": "int"})
   params.append({"key": "lpf_key", "name": "LPF Key Track", "options": ["OFF", "ON"], "default": 1})
   params.append({"key": "hpf_key", "name": "HPF Key Track", "options": ["OFF", "ON"], "default": 1})

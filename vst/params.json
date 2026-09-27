@@ -593,6 +593,36 @@
    "display": "string"
   },
   {
+   "key": "randomize_syn",
+   "name": "Randomise SYN",
+   "options": [
+    "OFF",
+    "ON"
+   ],
+   "default": 0,
+   "momentary": true
+  },
+  {
+   "key": "randomize_ampfilt",
+   "name": "Randomise AMP/FILT",
+   "options": [
+    "OFF",
+    "ON"
+   ],
+   "default": 0,
+   "momentary": true
+  },
+  {
+   "key": "randomize_lfo",
+   "name": "Randomise LFO1/2",
+   "options": [
+    "OFF",
+    "ON"
+   ],
+   "default": 0,
+   "momentary": true
+  },
+  {
    "key": "master_tune",
    "name": "Master Tune",
    "min": 400,

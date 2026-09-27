@@ -644,8 +644,11 @@ def extra_p(label, display, default, count=128, icons=0, values=None, fmt=None):
 
 
 # the extra global controls (not in upstream's One editor): master tune in Hz (the emulator supports 400..440), LPF/HPF key tracking
-GLOBAL_CELLS = [blank_p()] + ([blank_p() for _ in range(7)] if FXV else [extra_p("TUNE", 1, 127, fmt=lambda raw: str(int(round(400 + raw * 40 / 127.0)))),
-                extra_p("LPF KEY", 3, 127, 2, 1, ["OFF", "ON"]), extra_p("HPF KEY", 3, 127, 2, 1, ["OFF", "ON"])] + [blank_p() for _ in range(4)])
+GLOBAL_CELLS = [blank_p()] + ([blank_p() for _ in range(7)] if FXV else [
+    extra_p("TUNE", 1, 127, fmt=lambda raw: str(int(round(400 + raw * 40 / 127.0)))),
+    extra_p("LPF KEY", 3, 127, 2, 1, ["OFF", "ON"]), extra_p("HPF KEY", 3, 127, 2, 1, ["OFF", "ON"]),
+    blank_p(),   # index4: obscured by the LEV column, which spans both grid rows
+    extra_p("RND SYN", 3, 0, 2, 1, ["OFF", "ON"]), extra_p("RND A/F", 3, 0, 2, 1, ["OFF", "ON"]), extra_p("RND LFO", 3, 0, 2, 1, ["OFF", "ON"])])
 if LEVQ:
     PAGE_CELLS["GLOBAL"] = GLOBAL_CELLS
 for name, cells in PAGE_CELLS.items():
@@ -864,7 +867,7 @@ if LEVQ:
     # master tune: a dial cell (its value row shows Hz); LPF/HPF key tracking: two-state buttons drawn as the LCD's toggle cells
     if not FXV:
         cell_knobs("GLOBAL", GLOBAL_CELLS, ["level", "master_tune", "lpf_key", "hpf_key", "level", "level", "level", "level"])
-    for k_, key_p in (() if FXV else ((2, "lpf_key"), (3, "hpf_key"))):
+    for k_, key_p in (() if FXV else ((2, "lpf_key"), (3, "hpf_key"), (5, "randomize_syn"), (6, "randomize_ampfilt"), (7, "randomize_lfo"))):
         p_ = GLOBAL_CELLS[k_]
         imgs = {}
         for state, raw in (("on", 127), ("off", 0)):

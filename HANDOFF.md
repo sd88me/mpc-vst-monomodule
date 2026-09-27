@@ -214,6 +214,26 @@ checkpoint, not just at the end.
   the user to confirm before considering this closed. If it recurs, search for any other place a parameter has two placed
   components in the same page's componentsData.
 
+- **2026-09-27: Q-Link bug is track-mode only (user finding) -- screen-mode Q-Links are fine.** Narrows the earlier fix's scope:
+  the double-component-per-parameter theory may not be the whole story if it's specific to Track mode; keep both leads when this
+  is revisited.
+- **2026-09-27: three momentary "randomise" toggles in the GLOBAL quadrant** (RND SYN, RND A/F, RND LFO; params `randomize_syn`,
+  `randomize_ampfilt`, `randomize_lfo`, momentary, springs back like preset_prev/next). RND SYN randomises SYN A-G (excludes H,
+  which is TUNE on every pitched machine); RND A/F randomises AMP (excludes VOL) + all of FILT; RND LFO randomises all of LFO1
+  and LFO2 (no exceptions, as asked -- PAGE/DEST included). **Placed at GLOBAL cells 5-7, not 4**: cell 4 is visually obscured by
+  the LEV column, which spans both grid rows (found by testing -- only 3 of the 4 "spare" cells are actually free). Params 73.
+- **2026-09-27: factory kit bank recovered from the OS file (undocumented, not previously known to be there).** Section 4 of the
+  decompressed OS flash image ("RAM image", parsed nowhere else in this tree) turns out to hold the factory kit bank as a plain
+  array of 698-byte records in exactly decodeKit()'s post-unpack field layout (confirmed two ways: records recur every 698 bytes,
+  matching decodeKit()'s byte count end to end, and the field literally named `unused461` sits at byte offset 461 in that layout).
+  `vst/skin/mnm_factorybank.cpp` reads it directly (no sysex unpacking needed, it's already flash-resident) and re-encodes it with
+  the existing `encodeKit`/`encodeDump` into an ordinary kit-dump `.syx` -- so `buildCatalog()` in `mnm_engine.cpp` needs no
+  changes to use it. `extract_factory.sh <os.syx> <out.syx>`. 77 named kits after filtering unnamed/implausible slots (some are
+  literal duplicates, e.g. "SUPERWAVES" appears twice consecutively; `buildCatalog`'s own de-dup collapses those). Verified by
+  round-tripping the written .syx back through `dump::parseDump`: 191 raw slots -> 77 kits, 0 damaged. Installed at
+  `/sdcard/vst/monomodule/dumps/factory.syx` for the user to try; **this is Elektron's own factory content extracted from the
+  user's own OS file -- never commit or distribute the .syx itself**, only the extractor.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.

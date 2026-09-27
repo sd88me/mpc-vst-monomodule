@@ -19,6 +19,7 @@
 #include <cstring>
 #include <memory>
 #include <algorithm>
+#include <cstdlib>
 #include <dirent.h>
 #include <string>
 #include <vector>
@@ -82,6 +83,7 @@ int slotOf(const char* key)
         if (!std::strncmp(key, pages[p], n) && key[n] >= '0' && key[n] <= '7' && !key[n + 1]) return kSlotPages + p * 8 + (key[n] - '0');
     }
     if (!std::strcmp(key, "master_tune")) return kSlotTune;   // global (not part of a preset): master tune in Hz, 400..440
+    (void)0;
     if (!std::strcmp(key, "lpf_key")) return kSlotLpk;        // LPF / HPF track the key (KIT > ASSIGN > KEY)
     if (!std::strcmp(key, "hpf_key")) return kSlotHpk;
     if (!std::strcmp(key, "lfo23tab")) return kSlotTab;   // the LFO2 | LFO3 tab of the skin: skin state only
@@ -497,6 +499,19 @@ void eMidi(void* p, const uint8_t* m, int len)
 void eSet(void* p, const char* key, const char* val)
 {
     auto* in = static_cast<Inst*>(p);
+    if (!MNM_FX && !std::strcmp(key, "randomize_syn") && std::atof(val) > 0.5) {
+        for (int k = 0; k < 8; ++k) if (k != 7) in->param[kSlotPages + k].store(std::rand() % 128);   // SYN A-G (H is TUNE on every pitched machine)
+        return;
+    }
+    if (!MNM_FX && !std::strcmp(key, "randomize_ampfilt") && std::atof(val) > 0.5) {
+        for (int k = 0; k < 8; ++k) if (k != 5) in->param[kSlotPages + 8 + k].store(std::rand() % 128);   // AMP except VOL
+        for (int k = 0; k < 8; ++k) in->param[kSlotPages + 16 + k].store(std::rand() % 128);              // FILT
+        return;
+    }
+    if (!MNM_FX && !std::strcmp(key, "randomize_lfo") && std::atof(val) > 0.5) {
+        for (int k = 0; k < 16; ++k) in->param[kSlotLfo + k].store(std::rand() % 128);                     // LFO1 + LFO2
+        return;
+    }
     if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) {
         if (std::atof(val) > 0.5) in->stepPreset(key[7] == 'n' ? 1 : -1);
         return;
@@ -526,6 +541,7 @@ void eSet(void* p, const char* key, const char* val)
 int eGet(void* p, const char* key, char* buf, int len)
 {
     auto* in = static_cast<Inst*>(p);
+    if (!std::strncmp(key, "randomize_", 10)) return std::snprintf(buf, size_t(len), "0");   // momentary: always reads back off
     if (!std::strcmp(key, "preset_name")) return std::snprintf(buf, size_t(len), "%s", in->presetName().c_str());
     if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "lfo23dest")) {   // DEST's view of the LFO2|LFO3 page: tab * 9 + that LFO's PAGE list index
