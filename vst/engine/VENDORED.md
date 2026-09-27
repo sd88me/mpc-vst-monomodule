@@ -1,6 +1,6 @@
 # Vendored: schwung-monomodule engine glue
 
-`MonoVoice.{h,cpp}` and `dsp/DspEngine.{h,cpp}` are vendored from
+`MonoVoice.{h,cpp}`, `dsp/DspEngine.{h,cpp}` and `tools/mnm_golden.cpp` are vendored from
 [legsmechanical/schwung-monomodule](https://github.com/legsmechanical/schwung-monomodule), commit
 `bcbff13` (`main`), with one local change on top (below). License: AGPLv3 (`LICENSE` in this
 directory), same as upstream Monomodule's own.
@@ -34,6 +34,10 @@ performance and lifecycle work upstream's own copies don't have:
 None of this is required for correctness (upstream's own `MonoVoice`/`DspEngine` work fine); it's here
 because this port's static-recompilation performance budget (see `libs/dsp56300/docs/ARM32_JIT.md`)
 needed the lower per-block overhead and the idle-parking hooks.
+
+`tools/mnm_golden.cpp` is unchanged from upstream (no local diff): it renders a fixed script on every
+machine and hashes the output, used as the bit-exactness gate against the x86 interpreter reference
+(see `release/build_from_os.sh`).
 
 ## Local change on top of `bcbff13`
 

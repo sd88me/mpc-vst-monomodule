@@ -1,0 +1,5 @@
+# Native (x86_64) build image for release/build_from_os.sh's discovery/gate phases.
+FROM debian:bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build git ca-certificates python3 \
+    && rm -rf /var/lib/apt/lists/*

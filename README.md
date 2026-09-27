@@ -6,6 +6,9 @@ Live/One/X/Key, Force). **Monomodule One** is the instrument (15 synth machines)
 is the same engine's 7 effect machines as an audio effect. Both load in MPC's built-in plugin host
 with their own touchscreen skins and Q-Link support.
 
+Current release: **v0.9.0** — no downloadable build (see "Install" below for why); build it yourself
+from your own OS file with `release/build_from_os.sh`.
+
 Not affiliated with Elektron or with shnolk's Monomodule. Requires your own Monomachine OS file (see
 below); nothing of Elektron's is included or distributed.
 
@@ -91,29 +94,58 @@ your own file: **the generated `.syx` is never committed, distributed or include
 - Your own **Monomachine OS file** (tested against OS 1.32B), and optionally any Monomachine kit
   `.syx` dumps you want as presets. Not included; a free download from Elektron.
 
-## Install / build from source
+## Install
 
-There's no packaged release yet — build and deploy by hand. Needs Docker and a sibling checkout of
-[mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins) (the shared wrapper and skin tooling).
+**There is no universal download.** The DSP is static-recompiled ahead of time from your own OS file
+(see "Why this exists" above), and that recompiled code — your OS file's actual DSP program — ends up
+compiled into the plugin binary. So every build is personal: you build it from your own OS file, and
+the result is yours alone to install, never to redistribute.
+
+Needs Docker and a sibling checkout of [mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins)
+(the shared wrapper and skin tooling):
 
 ```
-git submodule update --init --recursive
+git clone --recursive https://github.com/sd88me/mpc-vst-monomodule.git
+cd mpc-vst-monomodule
+release/build_from_os.sh <your-os.syx> <mpc-vst-plugins checkout>   # ~5 min: discovery, bit-exactness gate, build, skins
+release/package.sh 0.9.0                                            # -> dist/Monomodule-0.9.0-mpc-armv7.zip
+```
+
+Then, on the device:
+
+```
+scp -r dist/Monomodule-0.9.0-mpc-armv7 root@<device-ip>:/tmp/
+ssh root@<device-ip> sh /tmp/Monomodule-0.9.0-mpc-armv7/install.sh
+```
+
+That installs both **Monomodule One** and **Monomodule FX**, backs up `MPC.settings` first, and needs
+one MPC restart (save your project first) — `release/uninstall.sh` reverses it. `build_from_os.sh`'s
+bit-exactness gate must pass before it builds anything for the device: if it doesn't, something about
+your OS file or toolchain differs from what this was built against, and the build stops rather than
+ship a build that isn't verified correct.
+
+Want the factory kit bank as presets too? `release/extract_factory.sh <your-os.syx> <out.syx>`, then
+copy the result into `/sdcard/vst/monomodule/dumps/` (see "The factory bank" above).
+
+### Building each piece by hand
+
+`release/build_from_os.sh` is a thin wrapper around three separate steps, useful individually if you're
+iterating on one part:
+
+```
 vst/build_so.sh <dir with dsp56k_recomp.inl> <mpc-vst-plugins checkout>
 vst/skin/build_skin.sh <your-os.syx> <mpc-vst-plugins checkout> layout=2x2
+vst/skin/build_skin.sh <your-os.syx> <mpc-vst-plugins checkout> layout=2x2 fx=1
 ```
 
-The first command cross-compiles `monomodule_one.so` and `monomodule_fx.so` from this repo alone (the
-`cmake/`, `CMakeLists.txt` at the repo root, `libs/monomodule` and `libs/dsp56300` submodules, and the
-vendored engine glue in `vst/engine/`) plus mpc-vst-plugins' wrapper — no external glue tree needed.
-It builds its own cross-compiler image (`tools/Dockerfile.armhf-builder`) on first use. The second
-command draws both skins from your OS file's art. `<dir with dsp56k_recomp.inl>` is your own build of
-the static recompiler (`libs/dsp56300/tools/arm32jit_prototype/recomp/README.md`) — it embeds firmware
-words and must never be committed or distributed.
-
-Deploy by copying the `.so` files to `/sdcard/vst/` and the skin folders (`vst/build/skin/`,
-`vst/fx/build/skin/`) into `/sdcard/Synths/`, then register both plugins in `MPC.settings` — see
-`mpc-vst-plugins`' `docs/PORTING.md` and `.claude/skills/mpc-vst-plugin/SKILL.md` for the exact steps.
-Registering needs an MPC restart; a `.so` or skin-only update afterwards doesn't.
+The first cross-compiles `monomodule_one.so` and `monomodule_fx.so` from this repo alone (the `cmake/`
+and `CMakeLists.txt` at the repo root, `libs/monomodule` and `libs/dsp56300` submodules, and the
+vendored engine glue in `vst/engine/`) plus mpc-vst-plugins' wrapper — no external glue tree needed. It
+builds its own cross-compiler image (`tools/Dockerfile.armhf-builder`) on first use. `<dir with
+dsp56k_recomp.inl>` is your own build of the static recompiler
+(`libs/dsp56300/tools/arm32jit_prototype/recomp/README.md`, or let `build_from_os.sh` run that step for
+you) — it embeds firmware words and must never be committed or distributed, and neither must the `.so`
+files it produces.
 
 ## Status
 

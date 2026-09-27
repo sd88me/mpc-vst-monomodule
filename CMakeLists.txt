@@ -11,10 +11,7 @@ endif()
 # the project this repo's vst/engine glue is vendored from).
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 
-set(MPC_VST_DIR "" CACHE PATH "mpc-vst-plugins checkout (the shared VST2 wrapper this plugin links)")
-if(NOT MPC_VST_DIR)
-  message(FATAL_ERROR "set -DMPC_VST_DIR=<mpc-vst-plugins checkout>")
-endif()
+set(MPC_VST_DIR "" CACHE PATH "mpc-vst-plugins checkout (the shared VST2 wrapper); only needed to build the plugin .so targets, not mnm-golden/mnm-recomp-discover")
 
 # Upstream Monomodule (GPLv3, libs/monomodule submodule): the emulator core only. Its JUCE plugins,
 # Library app and tests are not built. vst/engine/{MonoVoice,dsp/DspEngine} shadow upstream's own copies
@@ -38,6 +35,7 @@ target_compile_definitions(mnmcore PUBLIC MNM_OS_SYX="")
 # source (vst/mnm_engine.cpp), built twice against the shared wrapper (mpc-vst-plugins' vst2_wrap.c).
 # Each needs its own generated params.h (mpc-vst's gen_vst.py --params-h, run by vst/build_so.sh) on its
 # include path first: vst/build/ for One, vst/fx/build/ for FX.
+if(MPC_VST_DIR)
 foreach(variant one fx)
   if(variant STREQUAL "one")
     set(_target monomodule_one)
@@ -66,3 +64,13 @@ foreach(variant one fx)
   target_include_directories(${_smoke} PRIVATE ${MPC_VST_DIR}/wrapper)
   target_link_libraries(${_smoke} PRIVATE mnmcore pthread)
 endforeach()
+endif()
+
+# ---- static-recompiler pipeline tools (release/build_from_os.sh). Neither needs MPC_VST_DIR; each is
+# built in its own CMake configure, with the flag its phase needs on CMAKE_CXX_FLAGS (see the script):
+# discovery with -DDSP56K_RECOMP_DISCOVERY, the bit-exactness gate and the final .so with -DDSP56K_RECOMP.
+add_executable(mnm-golden vst/engine/tools/mnm_golden.cpp)
+target_link_libraries(mnm-golden PRIVATE mnmcore)
+
+add_executable(mnm-recomp-discover "${MNM_DSP56300_DIR}/tools/arm32jit_prototype/recomp/mnm_recomp_discover.cpp")
+target_link_libraries(mnm-recomp-discover PRIVATE mnmcore ${CMAKE_DL_LIBS})
