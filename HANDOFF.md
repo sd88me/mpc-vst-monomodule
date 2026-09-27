@@ -270,6 +270,10 @@ checkpoint, not just at the end.
   redeployed, hashes/file-counts matched the pre-bank-selector build exactly. **Next attempt: BANK stepper ABOVE
   PRESET (user's explicit order), and preview + confirm before deploying anything that shifts existing layout.**
 
+- **2026-09-27: bank selector shipped (redo).** Same feature as the reverted attempt, with BANK above PRESET (user's
+  order) and previewed + confirmed before deploying this time. Installed on the Force, both plugins. Not yet
+  device-tested by the user.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
