@@ -16,10 +16,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <cstring>
 #include <memory>
 #include <algorithm>
-#include <cstdlib>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <string>
@@ -147,11 +147,12 @@ struct NoteEv { int8_t type; int8_t note; };   // 1 on, 2 off, 3 all off
 // Presets: an "Init" per machine, then every synth sound (kit track) of the .syx dumps in <data dir>/dumps, as upstream.
 struct PresetSound {
     char name[28];
+    char bank[24];   // the .syx file it came from (basename, no extension), for the bank selector
     int machine;    // host::Machine model
     int level;
     uint8_t params[56];   // SYN AMP FILT EFX (32) + LFO 1-3 (24), raw
 };
-struct Catalog { std::vector<PresetSound> sounds; uint64_t signature = 0; };
+struct Catalog { std::vector<PresetSound> sounds; std::vector<std::string> banks; uint64_t signature = 0; };
 
 // A cheap signature of every .syx in the watched folders (name, size, mtime): scanDumps() re-samples this every
 // few seconds on a background thread, and only re-parses (buildCatalog) when it actually changes.
@@ -187,6 +188,11 @@ Catalog* buildCatalog(const std::vector<std::string>& dirs, uint64_t sig)
     scanDumps(dirs, &files);
     std::vector<std::string> seen;
     for (const auto& path : files) {
+        std::string bank = path.substr(path.find_last_of('/') + 1);
+        const auto dot = bank.find_last_of('.');
+        if (dot != std::string::npos) bank.resize(dot);
+        for (auto& ch : bank) ch = char(std::toupper(static_cast<unsigned char>(ch)));
+        if (bank.size() > 23) bank.resize(23);
         FILE* f = std::fopen(path.c_str(), "rb");
         if (!f) continue;
         std::vector<uint8_t> data;
@@ -209,6 +215,7 @@ Catalog* buildCatalog(const std::vector<std::string>& dirs, uint64_t sig)
                 seen.push_back(key);
                 PresetSound snd{};
                 std::snprintf(snd.name, sizeof snd.name, "%s %d", kit.name.c_str(), t + 1);
+                std::snprintf(snd.bank, sizeof snd.bank, "%s", bank.c_str());
                 snd.machine = tr.model;
                 snd.level = std::min<int>(tr.level, 127);
                 std::memcpy(snd.params, tr.params, 56);
@@ -216,7 +223,9 @@ Catalog* buildCatalog(const std::vector<std::string>& dirs, uint64_t sig)
                 cat->sounds.push_back(snd);
             }
         }
+        if (std::find(cat->banks.begin(), cat->banks.end(), bank) == cat->banks.end()) cat->banks.push_back(bank);
     }
+    std::sort(cat->banks.begin(), cat->banks.end());
     return cat;
 }
 
@@ -236,6 +245,7 @@ struct Inst {
     std::atomic<uint32_t> inWrite{0}, inRead{0}, dropped{0};
     std::atomic<Catalog*> cat{nullptr};
     int presetIdx = 0;               // 0 = Init, k = the machine's k-th sound; control thread only
+    std::string bankName;            // "" = ALL (every watched bank pooled); else one bank from Catalog::banks
     int snap[kNumSlots] = {};        // the loaded preset's values (slots 1..57), to tell "modified"
     std::vector<std::string> dumpDirs;
     std::vector<Catalog*> retiredCats;   // freed at destroy, not on rescan: a concurrent get_param() may still hold the old pointer briefly
@@ -269,16 +279,36 @@ struct Inst {
         for (int i = 1; i < kSlotTab; ++i) if (param[i].load() != snap[i]) return true;
         return false;
     }
-    // the sounds for a machine, sorted by name
+    // the sounds for a machine in the selected bank ("" = every bank), sorted by name
     std::vector<int> soundsFor(int model) const
     {
         std::vector<int> out;
         if (const Catalog* c = cat.load()) {
-            for (size_t i = 0; i < c->sounds.size(); ++i) if (c->sounds[i].machine == model) out.push_back(int(i));
+            for (size_t i = 0; i < c->sounds.size(); ++i)
+                if (c->sounds[i].machine == model && (bankName.empty() || bankName == c->sounds[i].bank)) out.push_back(int(i));
             std::sort(out.begin(), out.end(), [c](int a, int b) { return strcasecmp(c->sounds[size_t(a)].name, c->sounds[size_t(b)].name) < 0; });
         }
         return out;
     }
+    // bank names in cycle order: "" (ALL) first, then Catalog::banks alphabetically
+    std::vector<std::string> bankList() const
+    {
+        std::vector<std::string> out{""};
+        if (const Catalog* c = cat.load()) for (auto& b : c->banks) out.push_back(b);
+        return out;
+    }
+    void stepBank(int dir)
+    {
+        const auto banks = bankList();
+        int idx = 0;
+        for (size_t i = 0; i < banks.size(); ++i) if (banks[i] == bankName) { idx = int(i); break; }
+        const int n = int(banks.size());
+        idx = ((idx + dir) % n + n) % n;
+        bankName = banks[size_t(idx)];
+        presetIdx = 0;   // the current selection may not exist in the new bank: fall back to Init, as a machine change does
+        markLoaded();
+    }
+    std::string bankLabel() const { return bankName.empty() ? "ALL" : bankName; }
     void stepPreset(int dir)
     {
         const int ms = param[kSlotMachine].load();
@@ -554,6 +584,10 @@ void eSet(void* p, const char* key, const char* val)
         if (std::atof(val) > 0.5) in->stepPreset(key[7] == 'n' ? 1 : -1);
         return;
     }
+    if (!std::strcmp(key, "bank_prev") || !std::strcmp(key, "bank_next")) {
+        if (std::atof(val) > 0.5) in->stepBank(key[5] == 'n' ? 1 : -1);
+        return;
+    }
     if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && !std::strcmp(key + 4, "_pagesel")) {
         const int idx = std::clamp(int(std::lround(std::atof(val))), 0, 8);
         in->param[kSlotLfo + (key[3] - '1') * 8].store(listRawMid9(idx));
@@ -581,6 +615,8 @@ int eGet(void* p, const char* key, char* buf, int len)
     auto* in = static_cast<Inst*>(p);
     if (!std::strncmp(key, "randomize_", 10)) return std::snprintf(buf, size_t(len), "0");   // momentary: always reads back off
     if (!std::strcmp(key, "preset_name")) return std::snprintf(buf, size_t(len), "%s", in->presetName().c_str());
+    if (!std::strcmp(key, "bank_name")) return std::snprintf(buf, size_t(len), "%s", in->bankLabel().c_str());
+    if (!std::strcmp(key, "bank_prev") || !std::strcmp(key, "bank_next")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "lfo23dest")) {   // DEST's view of the LFO2|LFO3 page: tab * 9 + that LFO's PAGE list index
         const int tab = std::clamp(in->param[kSlotTab].load(), 0, 1);
