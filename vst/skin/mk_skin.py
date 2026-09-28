@@ -619,7 +619,56 @@ def syn_params(m):
     return [P(d) for d in m["params"]]
 
 
-bgs = [Image.new("RGB", (SKIN_W, SKIN_H), PAPER) for _ in range(NTABS)]
+# ------------------------------------------------------------------ chassis -------------------------------------------
+# The hardware's face (the same arrangement as mpc-vst-machinedrum's skin): a brushed-aluminium faceplate, a thin glossy
+# black bezel around the edge, and one big LCD inside it holding everything, with the backlight's darker edges.
+# Components only ever sit well inside it, where it's flat PAPER, so the strips' opaque backgrounds still match.
+# chassis=0: the plain LCD-coloured background instead. Only for "2x2" by default (the other layouts reach the edges).
+CHASSIS = args.get("chassis", "1" if LAYOUT == "2x2" else "0") == "1"
+ALU_H, ALU_V, BEZEL_W, LCD_EDGE = 18, 4, 10, 8
+LCD_RECT = (ALU_H + BEZEL_W, ALU_V + BEZEL_W, SKIN_W - ALU_H - BEZEL_W, SKIN_H - ALU_V - BEZEL_W)
+BEZEL = (6, 5, 6)
+
+
+def chassis():
+    import random
+    from PIL import ImageFilter
+    rnd = random.Random(7)
+    noise = Image.new("L", (SKIN_W // 16, SKIN_H))   # brushed aluminium: noise stretched along x, a soft vertical gradient
+    noise.putdata([rnd.randint(0, 255) for _ in range(noise.size[0] * noise.size[1])])
+    noise = noise.resize((SKIN_W, SKIN_H), Image.BILINEAR).filter(ImageFilter.GaussianBlur(0.6))
+    im = Image.new("RGB", (SKIN_W, SKIN_H))
+    px, nz = im.load(), noise.load()
+    for y in range(SKIN_H):
+        base = 182 - 22 * y / SKIN_H
+        for x in range(SKIN_W):
+            v = int(base + (nz[x, y] - 128) * 0.09)
+            px[x, y] = (v, v, v - 2)
+    dr = ImageDraw.Draw(im)
+    x0, y0, x1, y1 = LCD_RECT
+    bx0, by0, bx1, by1 = x0 - BEZEL_W, y0 - BEZEL_W, x1 + BEZEL_W, y1 + BEZEL_W
+    mask = Image.new("L", (SKIN_W, SKIN_H), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([bx0, by0, bx1, by1], radius=12, fill=255)
+    bez = Image.new("RGB", (SKIN_W, SKIN_H), BEZEL)
+    bp = bez.load()
+    for y in range(by0, by1 + 1):
+        for x in range(bx0, bx1 + 1):
+            a = int(40 * max(0.0, (x - bx0) / (bx1 - bx0) - (y - by0) / (by1 - by0) * 0.9 - 0.25))   # diagonal sheen
+            bp[x, y] = (BEZEL[0] + a, BEZEL[1] + a, BEZEL[2] + a + 1)
+    im.paste(bez, (0, 0), mask)
+    dr.rounded_rectangle([bx0, by0, bx1, by1], radius=12, outline=(80, 80, 82), width=1)
+    dr.rounded_rectangle([bx0 + 1, by0 + 1, bx1 - 1, by1 - 1], radius=11, outline=(24, 24, 26), width=1)
+    dr.rectangle([x0 - 1, y0 - 1, x1, y1], fill=(0, 0, 0))
+    edge = tuple(int(c * 0.80) for c in PAPER)
+    for d in range(LCD_EDGE):
+        f = d / LCD_EDGE
+        dr.rectangle([x0 + d, y0 + d, x1 - 1 - d, y1 - 1 - d], outline=tuple(int(e + (p_ - e) * f) for e, p_ in zip(edge, PAPER)))
+    dr.rectangle([x0 + LCD_EDGE, y0 + LCD_EDGE, x1 - 1 - LCD_EDGE, y1 - 1 - LCD_EDGE], fill=PAPER)
+    return im
+
+
+_face = chassis() if CHASSIS else Image.new("RGB", (SKIN_W, SKIN_H), PAPER)
+bgs = [_face.copy() for _ in range(NTABS)]
 
 # logo, LEV frame (on every tab)
 for b_ in bgs:
