@@ -106,6 +106,11 @@ your own file: **the generated `.syx` is never committed, distributed or include
 compiled into the plugin binary. So every build is personal: you build it from your own OS file, and
 the result is yours alone to install, never to redistribute.
 
+**Where to run this: on your own computer (macOS or Linux, with Docker and git), not on the Force.** The build runs
+inside Docker on your computer, and so does the `git clone` below. The Force is only where the finished plugin is
+installed: the `-d <device-ip>` option copies it there over your network and runs the installer, or you copy the zip
+over yourself afterwards (both shown below). Nothing is built or compiled on the device.
+
 Needs Docker (and `ssh`/`scp` if you use `-d` below). Everything else — cloning the
 [mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins) sibling checkout (shared wrapper and skin
 tooling), version numbering, packaging — is handled for you:
