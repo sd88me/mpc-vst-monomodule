@@ -257,6 +257,12 @@ The generated code and the OS file's LCD art both embed Elektron's own firmware/
 are built from *your* OS file at install time and never committed or distributed — see
 `vst/skin/.gitignore`.
 
+## License
+
+AGPL-3.0-only. See [LICENSE](LICENSE). The engine under `vst/engine` is adapted from
+[legsmechanical/schwung-monomodule](https://github.com/legsmechanical/schwung-monomodule) (AGPLv3); see
+`vst/engine/VENDORED.md`. Nothing of Elektron's is in this repository.
+
 ## Credits
 
 - **[shnolk](https://github.com/shnolk)**: [Monomodule](https://github.com/shnolk/monomodule), the
