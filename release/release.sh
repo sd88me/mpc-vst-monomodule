@@ -58,7 +58,7 @@ echo "== building Monomodule $VERSION from $(basename "$OS") =="
 "$ROOT/release/build_from_os.sh" "$OS" "$MV" "$LAYOUT"
 
 echo "== packaging =="
-"$ROOT/release/package.sh" "$VERSION"
+"$ROOT/release/package.sh" "$VERSION" "$OS" -m "$MV"
 ZIP="$ROOT/dist/Monomodule-$VERSION-mpc-armv7.zip"
 echo "Built: $ZIP"
 

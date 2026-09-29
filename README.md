@@ -68,7 +68,7 @@ currently selected on SYN. Switching machine changes what PREV/NEXT shows.
 
 Where sounds come from:
 - **INIT** — the current machine's own defaults, always first.
-- **Any Monomachine kit dump (`.syx`)** you place in either watched folder: `/sdcard/vst/monomodule/dumps/`
+- **Any Monomachine kit dump (`.syx`)** you place in either watched folder: `/sdcard/Synths/shnolk - VST - Monomodule One/monomodule/dumps/`
   (SD card / SSH) or `/sdcard/Force Documents/Monomachine Dumps/` (MPC's own file browser). Both are
   scanned every few seconds — no reinsert needed. A kit dump has up to 6 tracks; each track becomes
   one preset for whichever machine that track uses, so one kit can contribute several presets across
@@ -143,7 +143,7 @@ are still there individually if you want to run just one step, e.g. while iterat
 across multiple test builds.
 
 Want the factory kit bank as presets too? `release/extract_factory.sh <your-os.syx> <out.syx>`, then
-copy the result into `/sdcard/vst/monomodule/dumps/` (see "The factory bank" above).
+copy the result into `/sdcard/Synths/shnolk - VST - Monomodule One/monomodule/dumps/` (see "The factory bank" above).
 
 ### Plugin catalog
 

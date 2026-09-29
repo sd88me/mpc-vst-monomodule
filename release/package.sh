@@ -1,76 +1,85 @@
 #!/usr/bin/env bash
-# Packages an already-built vst/build + vst/fx/build (see release/build_from_os.sh) into one shareable zip
-# with install.sh/uninstall.sh, following mpc-vst-plugins' release convention (docs/RELEASING.md) but for
-# two plugins at once. This zip is per-user: it was built from YOUR OS file, so don't share it around.
-#   release/package.sh <version> [-o dist]
+# Packages an already-built vst/build + vst/fx/build (see release/build_from_os.sh) into one shareable zip that holds
+# TWO portable plugin packages (One and FX), each made by mpc-vst-plugins' tools/release.py (docs/RELEASING.md), plus a
+# top-level install.sh/uninstall.sh that run both. Each plugin is one self-contained folder in /sdcard/Synths, and BOTH
+# folders carry your OS file (the engine reads it at run time from <plugin folder>/monomodule/). Kit dumps go in One's
+# monomodule/dumps (user data, kept across upgrades). This zip is per-user: it was built from YOUR OS file, so don't
+# share it around.
+#   release/package.sh <version> <your-os.syx> [-o dist] [-m <mpc-vst-plugins checkout>]
 set -euo pipefail
-VERSION="$1"; OUT="dist"
-[ "${2:-}" = "-o" ] && OUT="$3"
+[ $# -ge 2 ] || { echo "usage: release/package.sh <version> <your-os.syx> [-o dist] [-m checkout]" >&2; exit 1; }
+VERSION="$1"; OS=$(realpath "$2"); shift 2
+OUT="dist"; MV="${MPC_VST:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in -o) OUT="$2"; shift 2 ;; -m) MV="$2"; shift 2 ;; *) echo "unknown option $1" >&2; exit 1 ;; esac
+done
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-REL="$ROOT/release"
+if [ -z "$MV" ]; then
+  for c in "$HOME/mpc-vst" "$HOME/.cache/mpc-vst-monomodule/mpc-vst-plugins" "$ROOT/../mpc-vst-plugins"; do
+    [ -f "$c/tools/release.py" ] && MV="$c" && break
+  done
+fi
+[ -f "$MV/tools/release.py" ] || { echo "need an mpc-vst-plugins checkout (-m or MPC_VST)" >&2; exit 1; }
+[ -f "$OS" ] || { echo "OS file not found: $OS" >&2; exit 1; }
+ONE="shnolk - VST - Monomodule One"; FX="shnolk - VST - Monomodule FX"
 for f in "$ROOT/vst/build/monomodule_one.so" "$ROOT/vst/build/monomodule_fx.so" \
-         "$ROOT/vst/build/skin/shnolk - VST - Monomodule One" "$ROOT/vst/fx/build/skin/shnolk - VST - Monomodule FX" \
+         "$ROOT/vst/build/skin/$ONE" "$ROOT/vst/fx/build/skin/$FX" \
          "$ROOT/vst/build/pluginlist-entry.xml" "$ROOT/vst/fx/build/pluginlist-entry.xml"; do
   [ -e "$f" ] || { echo "missing: $f -- run release/build_from_os.sh first" >&2; exit 1; }
 done
 
 TOP="Monomodule-$VERSION-mpc-armv7"
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
-D="$STAGE/$TOP"
-mkdir -p "$D/payload/vst" "$D/payload/Synths"
-cp "$ROOT/vst/build/monomodule_one.so" "$D/payload/vst/"
-cp "$ROOT/vst/build/monomodule_fx.so" "$D/payload/vst/"
-cp -a "$ROOT/vst/build/skin/shnolk - VST - Monomodule One" "$D/payload/Synths/"
-cp -a "$ROOT/vst/fx/build/skin/shnolk - VST - Monomodule FX" "$D/payload/Synths/"
-cp "$ROOT/vst/build/pluginlist-entry.xml" "$D/plugin_one.xml"
-cp "$ROOT/vst/fx/build/pluginlist-entry.xml" "$D/plugin_fx.xml"
-sed "s/@VERSION@/$VERSION/g" "$REL/install.sh" > "$D/install.sh"
-sed "s/@VERSION@/$VERSION/g" "$REL/uninstall.sh" > "$D/uninstall.sh"
-cp "$REL/plugin_list.awk" "$D/"
+D="$STAGE/$TOP"; mkdir -p "$D"
+OSDIR="$STAGE/osdata"; mkdir -p "$OSDIR/dumps"
+cp "$OS" "$OSDIR/Elektron_SFX6-60_OS1.32B.syx"
+touch "$OSDIR/dumps/.keep"
+
+common=(--version "$VERSION" --repo sd88me/mpc-vst-monomodule --license "AGPL-3.0-or-later" -o "$STAGE/pkg"
+        --requires "Built from your own Monomachine OS file; only for the device you built it for")
+python3 "$MV/tools/release.py" --so "$ROOT/vst/build/monomodule_one.so" --skin "$ROOT/vst/build/skin/$ONE" \
+  --entry "$ROOT/vst/build/pluginlist-entry.xml" --id monomodule-one --extra "$OSDIR:monomodule" \
+  --user-data monomodule/dumps --about "Monomachine engine as an instrument. " "${common[@]}"
+python3 "$MV/tools/release.py" --so "$ROOT/vst/build/monomodule_fx.so" --skin "$ROOT/vst/fx/build/skin/$FX" \
+  --entry "$ROOT/vst/fx/build/pluginlist-entry.xml" --id monomodule-fx --extra "$OSDIR:monomodule" \
+  --about "Monomachine engine as an audio effect. " "${common[@]}"
+for z in "$STAGE"/pkg/*.zip; do python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$z" "$STAGE/x"; done
+mv "$STAGE"/x/Monomodule-One-* "$D/one"
+mv "$STAGE"/x/Monomodule-FX-* "$D/fx"
+
+cat > "$D/install.sh" <<'EOF'
+#!/bin/sh
+# Installs Monomodule One and Monomodule FX (each as its own folder in /sdcard/Synths). Run on the device as root:
+#   sh install.sh [-y] [-t <synths-dir>]     (the arguments are passed on to both installers)
+set -e
+cd "$(dirname "$0")"
+YES=0; for a in "$@"; do [ "$a" = "-y" ] && YES=1; done
+if [ $YES = 0 ]; then
+    printf "Install Monomodule One and FX? MPC is stopped and restarted (once per plugin). Save your project first. [y/N] "
+    read -r ok; case "$ok" in y|Y|yes) ;; *) echo "cancelled"; exit 1 ;; esac
+fi
+sh one/install.sh -y "$@"
+sh fx/install.sh -y "$@"
+EOF
+sed 's/Installs/Removes/; s/install\.sh/uninstall.sh/g; s/Install Mono/Remove Mono/' "$D/install.sh" > "$D/uninstall.sh"
 chmod +x "$D/install.sh" "$D/uninstall.sh"
-
-( cd "$D" && find payload plugin_one.xml plugin_fx.xml -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS )
-
 cat > "$D/INSTALL.md" <<EOF
 # Monomodule for MPC OS $VERSION
 
-Built from your own Monomachine OS file (release/build_from_os.sh). **Only for the device you built it
-for** -- the plugin embeds your OS file's DSP program (see the repo README's "Why this exists"); don't
-pass this zip to anyone else. Requirements: a first-generation MPC OS standalone device (32-bit ARM:
-Force, MPC Live/Live II, One, X, Key 61), root SSH access.
-
-## Install
+Built from your own Monomachine OS file. **Only for the device you built it for**: the plugin embeds your OS file's DSP
+program, so don't pass this zip to anyone else. Needs a first-generation MPC OS standalone device (32-bit ARM: Force,
+MPC Live/Live II, One, X, Key 61) and root SSH access.
 
 \`\`\`
 scp -r $TOP root@<device-ip>:/tmp/
 ssh root@<device-ip> sh /tmp/$TOP/install.sh
 \`\`\`
 
-Stops MPC (save your project first), installs both **Monomodule One** (instrument) and **Monomodule FX**
-(audio effect), backs up \`MPC.settings\`, and restarts MPC. Running it again upgrades in place.
-
-Add presets: copy Monomachine kit \`.syx\` dumps (including the factory bank, if you extracted one with
-\`release/extract_factory.sh\`) into \`/sdcard/vst/monomodule/dumps/\` or MPC's own
-\`/sdcard/Force Documents/Monomachine Dumps/\` -- both are watched live, no reinsert needed.
-
-## Uninstall
-
-\`\`\`
-ssh root@<device-ip> sh /tmp/$TOP/uninstall.sh
-\`\`\`
-
-## Manual steps (if you'd rather not run the installer)
-
-1. Copy \`payload/vst/monomodule_one.so\` and \`payload/vst/monomodule_fx.so\` to \`/sdcard/vst/\`.
-2. Copy \`payload/Synths/shnolk - VST - Monomodule One\` and \`... FX\` to \`/sdcard/Synths/\`.
-3. Stop MPC (\`systemctl stop acvs\`), back up \`MPC.settings\`, insert the \`<PLUGIN .../>\` line from
-   \`plugin_one.xml\` and \`plugin_fx.xml\` into its \`pluginList-arm\` \`<KNOWNPLUGINS>\`, restart MPC
-   (\`systemctl start acvs\`).
-
-## Known issue
-
-Q-Link nudges on a 0-127 knob can climb a few steps then reset near 0 in MPC's **Track** Q-Link mode;
-**Screen** mode is unaffected. See the repo README's Status section.
+Installs **Monomodule One** (instrument) and **Monomodule FX** (effect), each as one folder in \`/sdcard/Synths\`
+(save your project first: MPC restarts). Your OS file is inside both folders. Kit \`.syx\` dumps go in
+\`/sdcard/Synths/$ONE/monomodule/dumps/\` (kept on upgrade) or MPC's \`/sdcard/Force Documents/Monomachine Dumps/\`.
+An older install in \`/sdcard/vst\` is replaced and its dumps moved. \`uninstall.sh\` removes both. Each plugin's own
+instructions are in \`one/INSTALL.md\` and \`fx/INSTALL.md\`.
 EOF
 
 mkdir -p "$OUT"
@@ -82,8 +91,7 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         dirs.sort(); files.sort()
         for f in files:
             p = os.path.join(root, f)
-            arc = os.path.relpath(p, stage)
-            zi = zipfile.ZipInfo.from_file(p, arc)
+            zi = zipfile.ZipInfo.from_file(p, os.path.relpath(p, stage))
             zi.external_attr = (stat.S_IMODE(os.lstat(p).st_mode) << 16) | (zi.external_attr & 0xFFFF)
             with open(p, "rb") as fh:
                 z.writestr(zi, fh.read(), zipfile.ZIP_DEFLATED)
