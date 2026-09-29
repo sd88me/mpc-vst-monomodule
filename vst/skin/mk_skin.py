@@ -625,7 +625,9 @@ def syn_params(m):
 # Components only ever sit well inside it, where it's flat PAPER, so the strips' opaque backgrounds still match.
 # chassis=0: the plain LCD-coloured background instead. Only for "2x2" by default (the other layouts reach the edges).
 CHASSIS = args.get("chassis", "1" if LAYOUT == "2x2" else "0") == "1"
-ALU_H, ALU_V, BEZEL_W, LCD_EDGE = 18, 4, 10, 8
+LCD_MARGIN_X = int(args.get("lcd_margin", 28))   # the LCD's left/right edge sits this far outside the page panels
+ALU_V, BEZEL_W, LCD_EDGE = 4, 10, 8
+ALU_H = max(4, OX + PAGES_X0 - LCD_MARGIN_X - BEZEL_W)   # faceplate border (left/right): whatever leaves the LCD just around the pages
 LCD_RECT = (ALU_H + BEZEL_W, ALU_V + BEZEL_W, SKIN_W - ALU_H - BEZEL_W, SKIN_H - ALU_V - BEZEL_W)
 BEZEL = (6, 5, 6)
 
