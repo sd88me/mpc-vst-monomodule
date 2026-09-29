@@ -1,1 +1,6 @@
 dist/
+
+# Elektron firmware and anything derived from it never goes in this repo.
+*.syx
+*.bin
+*.inl

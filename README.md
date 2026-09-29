@@ -44,8 +44,11 @@ requires it):
   edge margin) is the drag target, since MPC's touchscreen knobs are much larger than a mouse
   pointer.
 - **Layout choices** (`layout=tabs|2x2|grid` in `vst/skin/skin.conf`) and **colour presets**
-  (upstream's default/inverted/low-contrast, plus red/blue/green/orange and their inverted forms) —
+  (`mnm`, the default: the real unit's soft cool-grey LCD with near-black pixels, matched to a photo of the
+  hardware; upstream's default/inverted/low-contrast; and red/blue/green/orange and their inverted forms) —
   upstream is a fixed-size JUCE window; MPC's screen and skin format need a purpose-built layout.
+- **A hardware-style chassis** for the default `2x2` layout: a brushed-aluminium faceplate and thin bezel around
+  one LCD whose left and right edges sit a fixed margin (`lcd_margin=28` px) outside the page panels.
 - **A bank selector** alongside the PREV/NEXT preset stepper, so you can narrow browsing to one
   `.syx` dump at a time instead of every loaded dump pooled together. Upstream has a full scrollable
   library browser; MPC's plugin skins can't render a list whose length isn't known at build time (see
@@ -91,7 +94,7 @@ your own file: **the generated `.syx` is never committed, distributed or include
 ## Requirements
 
 - A first-generation MPC OS standalone device (32-bit ARM: Force, MPC Live/Live II, One, X, Key 61).
-  Tested on a Force.
+  Tested on a Force running MPC OS 3.9.1 (see `tested.json`).
 - Root SSH access. Installing plugins this way is unofficial: back up first, use at your own risk.
 - Your own **Monomachine OS file** (tested against OS 1.32B), and optionally any Monomachine kit
   `.syx` dumps you want as presets. Not included; a free download from Elektron.
@@ -136,6 +139,13 @@ across multiple test builds.
 
 Want the factory kit bank as presets too? `release/extract_factory.sh <your-os.syx> <out.syx>`, then
 copy the result into `/sdcard/vst/monomodule/dumps/` (see "The factory bank" above).
+
+### Plugin catalog
+
+Monomodule is a **build-it-yourself** plugin: the zip embeds your OS file's recompiled DSP, so it is built per user and must
+never be published as a release (a catalog entry for it links to this repo and its build instructions, not to a download).
+The one-command build is `release/release.sh` (above); device testing is recorded in `tested.json` (v0.9.0: Akai Force,
+MPC OS 3.9.1).
 
 ### Building each piece by hand
 
@@ -246,6 +256,12 @@ Full detail lives in [`libs/dsp56300/docs/ARM32_JIT.md`](libs/dsp56300/docs/ARM3
 The generated code and the OS file's LCD art both embed Elektron's own firmware/ROM content, so both
 are built from *your* OS file at install time and never committed or distributed — see
 `vst/skin/.gitignore`.
+
+## License
+
+AGPL-3.0-only. See [LICENSE](LICENSE). The engine under `vst/engine` is adapted from
+[legsmechanical/schwung-monomodule](https://github.com/legsmechanical/schwung-monomodule) (AGPLv3); see
+`vst/engine/VENDORED.md`. Nothing of Elektron's is in this repository.
 
 ## Credits
 

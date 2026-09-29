@@ -36,11 +36,12 @@ if os.path.isfile(_conf):
             _k, _v = _l.split("=", 1)
             args[_k.strip()] = _v.strip()
 args.update(dict(a.split("=", 1) for a in sys.argv[4:]))
-# colours: upstream's skin presets (Skin.h): default black on white, inverted, low contrast; custom = ink=/paper=
-PRESETS = {"default": ("000000", "ffffff"), "inverted": ("ffffff", "000000"), "lowcontrast": ("5c5c5c", "c4c4c4"),
+# colours: upstream's skin presets (Skin.h): default black on white, inverted, low contrast; mnm (the default here) is the real
+# unit's softer grey; custom = ink=/paper=
+PRESETS = {"default": ("000000", "ffffff"), "mnm": ("1b2024", "e4e8e8"),   # mnm: the real Monomachine LCD (soft cool grey, near-black pixels), after a photo of the unit "inverted": ("ffffff", "000000"), "lowcontrast": ("5c5c5c", "c4c4c4"),
            # backlit-LCD looks (bright ink on a dark tint), after the Elektron units' display colours
            "red": ("ff3b2e", "1c0403"), "blue": ("5ab0ff", "04112b"), "green": ("52ff70", "031608"), "orange": ("ffa11f", "1e1000")}
-_skin = args.get("skin", "default")
+_skin = args.get("skin", "mnm")
 _swap = _skin.endswith("-inverted") and _skin != "-inverted"      # "<colour>-inverted": the same pair, ink and paper swapped
 _ink, _paper = PRESETS.get(_skin[:-9] if _swap else _skin, PRESETS["default"])
 if _swap:
@@ -625,7 +626,9 @@ def syn_params(m):
 # Components only ever sit well inside it, where it's flat PAPER, so the strips' opaque backgrounds still match.
 # chassis=0: the plain LCD-coloured background instead. Only for "2x2" by default (the other layouts reach the edges).
 CHASSIS = args.get("chassis", "1" if LAYOUT == "2x2" else "0") == "1"
-ALU_H, ALU_V, BEZEL_W, LCD_EDGE = 18, 4, 10, 8
+LCD_MARGIN_X = int(args.get("lcd_margin", 28))   # the LCD's left/right edge sits this far outside the page panels
+ALU_V, BEZEL_W, LCD_EDGE = 4, 10, 8
+ALU_H = max(4, OX + PAGES_X0 - LCD_MARGIN_X - BEZEL_W)   # faceplate border (left/right): whatever leaves the LCD just around the pages
 LCD_RECT = (ALU_H + BEZEL_W, ALU_V + BEZEL_W, SKIN_W - ALU_H - BEZEL_W, SKIN_H - ALU_V - BEZEL_W)
 BEZEL = (6, 5, 6)
 
