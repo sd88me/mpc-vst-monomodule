@@ -6,8 +6,8 @@ Live/One/X/Key, Force). **Monomodule One** is the instrument (15 synth machines)
 is the same engine's 7 effect machines as an audio effect. Both load in MPC's built-in plugin host
 with their own touchscreen skins and Q-Link support.
 
-Current release: **v0.9.0** — no downloadable build (see "Install" below for why); build it yourself
-from your own OS file with `release/build_from_os.sh`.
+Current release: **v0.9.1** — no downloadable build (see "Install" below for why); build it yourself
+from your own OS file with `release/release.sh` (one command; `release/build_from_os.sh` is its build step).
 
 Not affiliated with Elektron or with shnolk's Monomodule. Requires your own Monomachine OS file (see
 below); nothing of Elektron's is included or distributed.
