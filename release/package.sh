@@ -21,7 +21,7 @@ if [ -z "$MV" ]; then
 fi
 [ -f "$MV/tools/release.py" ] || { echo "need an mpc-vst-plugins checkout (-m or MPC_VST)" >&2; exit 1; }
 [ -f "$OS" ] || { echo "OS file not found: $OS" >&2; exit 1; }
-ONE="shnolk - VST - Monomodule One"; FX="shnolk - VST - Monomodule FX"
+ONE="sd88me - VST - Monomodule One"; FX="sd88me - VST - Monomodule FX"
 for f in "$ROOT/vst/build/monomodule_one.so" "$ROOT/vst/build/monomodule_fx.so" \
          "$ROOT/vst/build/skin/$ONE" "$ROOT/vst/fx/build/skin/$FX" \
          "$ROOT/vst/build/pluginlist-entry.xml" "$ROOT/vst/fx/build/pluginlist-entry.xml"; do
@@ -62,6 +62,15 @@ if [ $YES = 0 ]; then
     printf "Install Monomodule One and FX? MPC is stopped and restarted (once per plugin). Save your project first. [y/N] "
     read -r ok; case "$ok" in y|Y|yes) ;; *) echo "cancelled"; exit 1 ;; esac
 fi
+# Up to 0.9.x the plugins were listed under the vendor "shnolk" (the author of the Monomodule engine, who doesn't make or
+# support this port): rename those folders to the new vendor's, so the installers below treat them as an earlier install
+# (your kit dumps are kept; the plugin-list entries are replaced by uid).
+SYNTHS=/sdcard/Synths; prev=""; for a in "$@"; do [ "$prev" = "-t" ] && SYNTHS="$a"; prev="$a"; done
+for p in "Monomodule One" "Monomodule FX"; do
+    if [ -d "$SYNTHS/shnolk - VST - $p" ] && [ ! -e "$SYNTHS/sd88me - VST - $p" ]; then
+        mv "$SYNTHS/shnolk - VST - $p" "$SYNTHS/sd88me - VST - $p" && echo "renamed $SYNTHS/shnolk - VST - $p -> sd88me - VST - $p"
+    fi
+done
 sh one/install.sh -y "$@"
 sh fx/install.sh -y "$@"
 EOF

@@ -9,7 +9,9 @@ with their own touchscreen skins and Q-Link support.
 Current release: **v0.9.1** — no downloadable build (see "Install" below for why); build it yourself
 from your own OS file with `release/release.sh` (one command; `release/build_from_os.sh` is its build step).
 
-Not affiliated with Elektron or with shnolk's Monomodule. Requires your own Monomachine OS file (see
+An MPC port by sd88me of shnolk's Monomodule engine (all credit for the emulation to shnolk; see Credits). Listed in MPC
+under the manufacturer **sd88me**, since shnolk neither makes nor supports this port: report problems here, not to shnolk.
+Not affiliated with Elektron or with shnolk. Requires your own Monomachine OS file (see
 below); nothing of Elektron's is included or distributed.
 
 <img width="1280" height="800" alt="2026-09-27T112814157Z" src="https://github.com/user-attachments/assets/b2e0db94-40a6-4b6d-ac32-b13ef54a8562" />
@@ -68,7 +70,7 @@ currently selected on SYN. Switching machine changes what PREV/NEXT shows.
 
 Where sounds come from:
 - **INIT** — the current machine's own defaults, always first.
-- **Any Monomachine kit dump (`.syx`)** you place in either watched folder: `/sdcard/Synths/shnolk - VST - Monomodule One/monomodule/dumps/`
+- **Any Monomachine kit dump (`.syx`)** you place in either watched folder: `/sdcard/Synths/sd88me - VST - Monomodule One/monomodule/dumps/`
   (SD card / SSH) or `/sdcard/Force Documents/Monomachine Dumps/` (MPC's own file browser). Both are
   scanned every few seconds — no reinsert needed. A kit dump has up to 6 tracks; each track becomes
   one preset for whichever machine that track uses, so one kit can contribute several presets across
@@ -143,7 +145,7 @@ are still there individually if you want to run just one step, e.g. while iterat
 across multiple test builds.
 
 Want the factory kit bank as presets too? `release/extract_factory.sh <your-os.syx> <out.syx>`, then
-copy the result into `/sdcard/Synths/shnolk - VST - Monomodule One/monomodule/dumps/` (see "The factory bank" above).
+copy the result into `/sdcard/Synths/sd88me - VST - Monomodule One/monomodule/dumps/` (see "The factory bank" above).
 
 ### Plugin catalog
 

@@ -4,7 +4,7 @@ drawn from the user's Monomachine OS artwork (art.json, from mnm-artdump) and up
 
     mk_skin.py <art.json> <params.json> <out-dir> [ink=RRGGBB paper=RRGGBB]
 
-Writes <out-dir>/shnolk - VST - Monomodule One/ (TUI.json, Q-Links.json, PNGs). The images contain Elektron's LCD
+Writes <out-dir>/sd88me - VST - Monomodule One/ (TUI.json, Q-Links.json, PNGs). The images contain Elektron's LCD
 artwork: they are per-user build output, never committed or distributed.
 
 How the upstream editor maps onto an MPC skin (1280x628; the editor is 1270x590 and centred):
@@ -261,7 +261,7 @@ def strip_for(p):
 # ------------------------------------------------------------------ output ----------------------------------------
 FXV = args.get("fx") == "1"      # Monomodule FX: the FX machines, no notes-related globals
 NAME = "Monomodule FX" if FXV else "Monomodule One"
-VENDOR = "shnolk"
+VENDOR = "sd88me"
 OUT = os.path.join(sys.argv[3], "%s - VST - %s" % (VENDOR, NAME))
 SKIN = os.path.join(OUT, "Plugin Skins")
 os.makedirs(SKIN, exist_ok=True)
