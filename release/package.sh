@@ -29,7 +29,7 @@ for f in "$ROOT/vst/build/monomodule_one.so" "$ROOT/vst/build/monomodule_fx.so" 
 done
 
 for so in monomodule_one monomodule_fx; do   # a .so built before the portable layout still looks in /sdcard/vst and finds no OS file
-  strings "$ROOT/vst/build/$so.so" | grep -q "/proc/self/maps" || { echo "$so.so is stale (no plugin-dir lookup): re-run release/build_from_os.sh" >&2; exit 1; }
+  grep -qa "/proc/self/maps" "$ROOT/vst/build/$so.so" || { echo "$so.so is stale (no plugin-dir lookup): re-run release/build_from_os.sh" >&2; exit 1; }
 done
 
 TOP="Monomodule-$VERSION-mpc-armv7"
