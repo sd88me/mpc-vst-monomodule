@@ -12,7 +12,7 @@ from your own OS file with `release/release.sh` (one command; `release/build_fro
 Not affiliated with Elektron or with shnolk's Monomodule. Requires your own Monomachine OS file (see
 below); nothing of Elektron's is included or distributed.
 
-<img width="640" height="400" alt="2026-09-29T101442021Z" src="https://github.com/user-attachments/assets/19540a46-9e84-48c4-8efa-f4395f9a46b4" />
+<img width="640" height="400" alt="2026-09-30T112857523Z" src="https://github.com/user-attachments/assets/2c29822c-85a8-45f6-8c58-ff26574b3630" />
 
 ## Why this exists
 
