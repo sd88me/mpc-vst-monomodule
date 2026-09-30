@@ -28,6 +28,10 @@ for f in "$ROOT/vst/build/monomodule_one.so" "$ROOT/vst/build/monomodule_fx.so" 
   [ -e "$f" ] || { echo "missing: $f -- run release/build_from_os.sh first" >&2; exit 1; }
 done
 
+for so in monomodule_one monomodule_fx; do   # a .so built before the portable layout still looks in /sdcard/vst and finds no OS file
+  strings "$ROOT/vst/build/$so.so" | grep -q "/proc/self/maps" || { echo "$so.so is stale (no plugin-dir lookup): re-run release/build_from_os.sh" >&2; exit 1; }
+done
+
 TOP="Monomodule-$VERSION-mpc-armv7"
 STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
 D="$STAGE/$TOP"; mkdir -p "$D"
