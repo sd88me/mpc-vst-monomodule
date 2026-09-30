@@ -6,13 +6,20 @@ Live/One/X/Key, Force). **Monomodule One** is the instrument (15 synth machines)
 is the same engine's 7 effect machines as an audio effect. Both load in MPC's built-in plugin host
 with their own touchscreen skins and Q-Link support.
 
-Current release: **v0.9.1** — no downloadable build (see "Install" below for why); build it yourself
+Current release: **v0.10.0** — no downloadable build (see "Install" below for why); build it yourself
 from your own OS file with `release/release.sh` (one command; `release/build_from_os.sh` is its build step).
 
-Not affiliated with Elektron or with shnolk's Monomodule. Requires your own Monomachine OS file (see
+An MPC port by sd88me of shnolk's Monomodule engine (all credit for the emulation to shnolk; see Credits). Listed in MPC
+under the manufacturer **sd88me**, since shnolk neither makes nor supports this port: report problems here, not to shnolk.
+Not affiliated with Elektron or with shnolk. Requires your own Monomachine OS file (see
 below); nothing of Elektron's is included or distributed.
 
 <img width="640" height="400" alt="2026-09-30T112857523Z" src="https://github.com/user-attachments/assets/2c29822c-85a8-45f6-8c58-ff26574b3630" />
+
+**New in 0.10.0:** the plugins are listed under the manufacturer **sd88me** (they were listed as shnolk, who wrote the engine but
+doesn't make or support this port). Installing renames your old `shnolk - VST - Monomodule One/FX` folders, so your kit dumps are
+kept, and replaces the plugin-list entries. The skin no longer carries shnolk's logo: the header reads MONO MODULE and the machine
+selector lines up with the SYN page.
 
 ## Why this exists
 
@@ -68,7 +75,7 @@ currently selected on SYN. Switching machine changes what PREV/NEXT shows.
 
 Where sounds come from:
 - **INIT** — the current machine's own defaults, always first.
-- **Any Monomachine kit dump (`.syx`)** you place in either watched folder: `/sdcard/Synths/shnolk - VST - Monomodule One/monomodule/dumps/`
+- **Any Monomachine kit dump (`.syx`)** you place in either watched folder: `/sdcard/Synths/sd88me - VST - Monomodule One/monomodule/dumps/`
   (SD card / SSH) or `/sdcard/Force Documents/Monomachine Dumps/` (MPC's own file browser). Both are
   scanned every few seconds — no reinsert needed. A kit dump has up to 6 tracks; each track becomes
   one preset for whichever machine that track uses, so one kit can contribute several presets across
@@ -143,7 +150,7 @@ are still there individually if you want to run just one step, e.g. while iterat
 across multiple test builds.
 
 Want the factory kit bank as presets too? `release/extract_factory.sh <your-os.syx> <out.syx>`, then
-copy the result into `/sdcard/Synths/shnolk - VST - Monomodule One/monomodule/dumps/` (see "The factory bank" above).
+copy the result into `/sdcard/Synths/sd88me - VST - Monomodule One/monomodule/dumps/` (see "The factory bank" above).
 
 ### Plugin catalog
 

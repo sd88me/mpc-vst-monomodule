@@ -4,7 +4,7 @@ drawn from the user's Monomachine OS artwork (art.json, from mnm-artdump) and up
 
     mk_skin.py <art.json> <params.json> <out-dir> [ink=RRGGBB paper=RRGGBB]
 
-Writes <out-dir>/shnolk - VST - Monomodule One/ (TUI.json, Q-Links.json, PNGs). The images contain Elektron's LCD
+Writes <out-dir>/sd88me - VST - Monomodule One/ (TUI.json, Q-Links.json, PNGs). The images contain Elektron's LCD
 artwork: they are per-user build output, never committed or distributed.
 
 How the upstream editor maps onto an MPC skin (1280x628; the editor is 1270x590 and centred):
@@ -261,7 +261,7 @@ def strip_for(p):
 # ------------------------------------------------------------------ output ----------------------------------------
 FXV = args.get("fx") == "1"      # Monomodule FX: the FX machines, no notes-related globals
 NAME = "Monomodule FX" if FXV else "Monomodule One"
-VENDOR = "shnolk"
+VENDOR = "sd88me"
 OUT = os.path.join(sys.argv[3], "%s - VST - %s" % (VENDOR, NAME))
 SKIN = os.path.join(OUT, "Plugin Skins")
 os.makedirs(SKIN, exist_ok=True)
@@ -674,8 +674,41 @@ _face = chassis() if CHASSIS else Image.new("RGB", (SKIN_W, SKIN_H), PAPER)
 bgs = [_face.copy() for _ in range(NTABS)]
 
 # logo, LEV frame (on every tab)
-for b_ in bgs:
-    draw_logo(b_, OX + MARG, OY + (TOP if GRID else 8), LEV_W, 18 * S, INK)
+def draw_wordmark(im, x, y, w, h, colour, words=("MONO", "MODULE")):
+    """The header mark: stacked LCD-font words, the largest whole scale that fits the box, centred. Replaces shnolk's logo:
+    this port is not made or supported by shnolk, so it doesn't carry their mark (credit is in the README)."""
+    best = None
+    for font in ("bold8", "small4x5", "tiny3x5"):
+        f = F[font]
+        for sc in range(S * 2, 0, -1):
+            gap = sc
+            tw = max(text_width(f, wd) for wd in words) * sc
+            th = len(words) * f.h * sc + (len(words) - 1) * gap
+            if tw <= w and th <= h:
+                if not best or sc * f.h > best[1] * F[best[0]].h:
+                    best = (font, sc, tw, th, gap)
+                break
+    font, sc, tw, th, gap = best
+    f = F[font]
+    y0 = y + (h - th) // 2
+    for i, wd in enumerate(words):
+        px_text(im, f, wd, x + (w - text_width(f, wd) * sc) // 2, y0 + i * (f.h * sc + gap), sc, colour)
+
+
+# 2x2/tabs: the machine block sits flush with the SYN page's right edge, and the header's left part carries the wordmark
+SYN_RIGHT = page_origin("SYN")[0] + LCD_W * S
+BAR_W_ALL = max(machine_bar(m).size[0] for m in MACHINES)
+if not GRID and os.environ.get("MNM_SKIN_LOGO") != "shnolk":
+    for b_ in bgs:
+        _wx = OX + MARG
+        draw_wordmark(b_, _wx, OY + 8, SYN_RIGHT - BAR_W_ALL - 8 * S - _wx, BAR_ROWS * S, INK,
+                      tuple(os.environ.get("MNM_SKIN_WORDS", "MONO MODULE").split()))
+for b_ in ([] if not GRID and os.environ.get("MNM_SKIN_LOGO") != "shnolk" else bgs):
+    if os.environ.get("MNM_SKIN_LOGO") == "shnolk":
+        draw_logo(b_, OX + MARG, OY + (TOP if GRID else 8), LEV_W, 18 * S, INK)
+    else:
+        draw_wordmark(b_, OX + MARG, OY + (TOP if GRID else 8), LEV_W, 18 * S, INK,
+                      tuple(os.environ.get("MNM_SKIN_WORDS", "MONO MODULE").split()))
 
 # static pages (SYN uses the default machine's labels here; the overlay per machine repaints its grid)
 PAGE_CELLS = {"AMP": shared_params(0), "FILT": shared_params(1), "EFX": shared_params(2), "LFO1": lfo_params()}
@@ -728,7 +761,7 @@ if GRID:
     _gx, _gy = page_origin("GLOBAL")
     BAR_X, BAR_Y = _gx + 2 * S, _gy + 12 * S
 else:
-    BAR_X, BAR_Y = OX + BAR_X_W, OY + 8
+    BAR_X, BAR_Y = (OX + BAR_X_W if os.environ.get("MNM_SKIN_LOGO") == "shnolk" else SYN_RIGHT - BAR_W_ALL), OY + 8
 
 # SYN overlays per machine: the grid (labels differ) + the machine bar
 syn_x, syn_y = page_origin("SYN")
@@ -742,7 +775,7 @@ for mi, m in enumerate(MACHINES):
     bar = machine_bar(m)
     BAR_W_MAX = max(globals().get("BAR_W_MAX", 0), bar.size[0])
     fn = save_png("mb_%02d" % mi, bar)
-    image_comp("Machine %s" % m["displayName"], fn, BAR_X, BAR_Y, bar.size[0], bar.size[1], cond=enabling("machine", mi, len(MACHINES)),
+    image_comp("Machine %s" % m["displayName"], fn, BAR_X + (BAR_W_ALL - bar.size[0] if BAR_X == SYN_RIGHT - BAR_W_ALL else 0), BAR_Y, bar.size[0], bar.size[1], cond=enabling("machine", mi, len(MACHINES)),
                tab=0 if GRID else None)
 
 # preset strip (upstream PresetStrip minus the library parts): PREV, the PRESET selector (its name is live text), NEXT
@@ -1082,7 +1115,7 @@ open_c = enabling("machine__open", 1, 2)
 # the field over the machine bar: a tap toggles the picker
 key = "mnmPickField"
 defs[key] = ss._local(key, [ss._action("Mouse Down", "Toggle Switch"), ss._action("Enter Pressed", "Toggle Switch")], [ss._focus(75 * S, BAR_ROWS * S)])
-place(key, "Machine picker", PIDX["machine__open"], BAR_X, BAR_Y, 75 * S, BAR_ROWS * S, focus="Yes", extra={"Text": PIDX["machine"]}, tab=0 if GRID else None)
+place(key, "Machine picker", PIDX["machine__open"], BAR_X + max(0, BAR_W_ALL - 75 * S) if BAR_X == SYN_RIGHT - BAR_W_ALL else BAR_X, BAR_Y, 75 * S, BAR_ROWS * S, focus="Yes", extra={"Text": PIDX["machine"]}, tab=0 if GRID else None)
 parts = []
 pk = "mnmPickPanel"
 defs[pk] = ss._local(pk, [], [ss._sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": fn_panel}, ss._bounds(0, 0, pk_w, pk_h), "Image")])

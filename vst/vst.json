@@ -1,5 +1,5 @@
 {
-  "name": "Monomodule One", "vendor": "shnolk", "uid": "MnmO", "version": 1000,
+  "name": "Monomodule One", "vendor": "sd88me", "uid": "MnmO", "version": 1000,
   "so": "monomodule_one.so",
   "params": "params.json", "custom_skin": true, "defines": {"MODULE_SUBDIR": "\"monomodule\"", "MODULE_DIR": "\"/sdcard/vst/monomodule\""},
   "build": {"root": "..", "sources": [], "cflags": [], "libs": []}
