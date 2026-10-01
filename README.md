@@ -6,7 +6,7 @@ Live/One/X/Key, Force). **Monomodule One** is the instrument (15 synth machines)
 is the same engine's 7 effect machines as an audio effect. Both load in MPC's built-in plugin host
 with their own touchscreen skins and Q-Link support.
 
-Current release: **v0.10.0** — no downloadable build (see "Install" below for why); build it yourself
+Current release: **v0.10.1** — no downloadable build (see "Install" below for why); build it yourself
 from your own OS file with `release/release.sh` (one command; `release/build_from_os.sh` is its build step).
 
 An MPC port by sd88me of shnolk's Monomodule engine (all credit for the emulation to shnolk; see Credits). Listed in MPC
@@ -15,6 +15,10 @@ Not affiliated with Elektron or with shnolk. Requires your own Monomachine OS fi
 below); nothing of Elektron's is included or distributed.
 
 <img width="640" height="400" alt="2026-09-30T112857523Z" src="https://github.com/user-attachments/assets/2c29822c-85a8-45f6-8c58-ff26574b3630" />
+
+**New in 0.10.1:** saving and reloading now keeps your patch. Before, a saved MPC project, program or plugin preset came back as
+the Init sound, because the plugin never handed MPC its state. It now stores every knob, the machine, the preset and bank
+selection, so a reload restores the sound exactly.
 
 **New in 0.10.0:** the plugins are listed under the manufacturer **sd88me** (they were listed as shnolk, who wrote the engine but
 doesn't make or support this port). Installing renames your old `shnolk - VST - Monomodule One/FX` folders, so your kit dumps are
