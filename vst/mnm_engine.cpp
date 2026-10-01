@@ -337,6 +337,40 @@ struct Inst {
         for (auto& ch : name) ch = char(toupper(static_cast<unsigned char>(ch)));
         return modified() ? name + " *" : name;
     }
+    // The whole instance for the host's project/program chunk: "v1|<all slots>|<snap 1..57>|<presetIdx>|<bank>".
+    std::string saveState() const
+    {
+        std::string o = "v1|";
+        for (int i = 0; i < kNumSlots; ++i) { if (i) o += ','; o += std::to_string(param[i].load()); }
+        o += '|';
+        for (int i = 1; i < kSlotTab; ++i) { if (i > 1) o += ','; o += std::to_string(snap[i]); }
+        o += '|' + std::to_string(presetIdx) + '|' + bankName;
+        return o;
+    }
+    void loadState(const char* str)
+    {
+        if (std::strncmp(str, "v1|", 3)) return;
+        const char* c = str + 3;
+        int vals[kNumSlots], sn[kNumSlots] = {};
+        auto parse = [&c](int* dst, int n, int first) {
+            for (int i = first; i < first + n; ++i) {
+                char* e; dst[i] = int(std::strtol(c, &e, 10));
+                if (e == c) return false;
+                c = e; if (*c == ',') ++c;
+            }
+            return true;
+        };
+        if (!parse(vals, kNumSlots, 0) || *c++ != '|' || !parse(sn, kSlotTab - 1, 1) || *c++ != '|') return;
+        char* e; const int idx = int(std::strtol(c, &e, 10));
+        if (e == c || *e != '|') return;
+        bankName = e + 1;
+        vals[kSlotMachine] = std::clamp(vals[kSlotMachine], 0, kNumMachines - 1);
+        vals[kSlotTune] = std::clamp(vals[kSlotTune], 400, 440);
+        for (int i = 1; i < kNumSlots; ++i) if (i != kSlotTune) vals[i] = std::clamp(vals[i], 0, (i == kSlotLpk || i == kSlotHpk) ? 1 : 127);
+        for (int i = 0; i < kNumSlots; ++i) param[i].store(vals[i]);
+        for (int i = 1; i < kSlotTab; ++i) snap[i] = sn[i];
+        presetIdx = std::max(idx, 0);
+    }
     void pushNote(int8_t t, int8_t n)
     {
         const uint32_t w = nWrite.load(std::memory_order_relaxed);
@@ -580,6 +614,7 @@ void eSet(void* p, const char* key, const char* val)
         for (int k = 0; k < 16; ++k) in->param[kSlotLfo + k].store(std::rand() % 128);                     // LFO1 + LFO2
         return;
     }
+    if (!std::strcmp(key, "state")) { in->loadState(val); return; }
     if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) {
         if (std::atof(val) > 0.5) in->stepPreset(key[7] == 'n' ? 1 : -1);
         return;
@@ -613,6 +648,7 @@ void eSet(void* p, const char* key, const char* val)
 int eGet(void* p, const char* key, char* buf, int len)
 {
     auto* in = static_cast<Inst*>(p);
+    if (!std::strcmp(key, "state")) return std::snprintf(buf, size_t(len), "%s", in->saveState().c_str());
     if (!std::strncmp(key, "randomize_", 10)) return std::snprintf(buf, size_t(len), "0");   // momentary: always reads back off
     if (!std::strcmp(key, "preset_name")) return std::snprintf(buf, size_t(len), "%s", in->presetName().c_str());
     if (!std::strcmp(key, "bank_name")) return std::snprintf(buf, size_t(len), "%s", in->bankLabel().c_str());
