@@ -366,3 +366,19 @@ checkpoint, not just at the end.
    destructor exit if `MNM_OPSTATS=<dir>` is set) — small, rebuild in ~30min.
 - Ask the user before restarting MPC on the Force (192.168.1.44) or touching its `MPC.settings`,
   per the `mpc-vst-plugin` skill.
+
+## State-restore resolved (2026-10-02, commit d0a2222 + this note)
+
+- **Root cause:** MPC probes the `machine` parameter (set 14, read back, set the original) right after a project load / `SET state`,
+  around clip play and around the autosampler. Each machine change reset the pages to defaults, wiping the restored patch (machine
+  kept, knobs default, `INIT` without `*`). Not a missing `SET state`: `SET state` arrived and was correct.
+- **Fix:** `Inst::stashSound/unstashSound` in `vst/mnm_engine.cpp`: the replaced sound is stashed and put back if its machine returns
+  within 500 ms. Device-tested: project reload, clip play and autosampler all keep the patch.
+- **Plugin preset reload:** one run sent no state call at all on reload (cause unknown, not reproduced); two later runs, same build
+  family, sent `GET state` then `SET state` and restored correctly. If it recurs, use the trace build (below) and read the `HOST op`
+  lines around the reload.
+- **Trace builds:** local branch `wip/fix-trace` = fix + engine trace; the host-call log is `dist/wrapper-hostlog-debug.patch`
+  (apply to mpc-vst-plugins `wrapper/vst2_wrap.c`, build with `-m <that checkout>`; the release script otherwise uses its cached
+  clone and silently omits it). Never release these.
+- **Build gotcha:** `/tmp` here is a 9.8 GB tmpfs that fills up; run the build with `TMPDIR=~/tmpbuild`.
+- **Open:** Machinedrum (`/home/sam/mpc-vst-machinedrum`) likely has the same machine-probe reset; check its trace before assuming.
