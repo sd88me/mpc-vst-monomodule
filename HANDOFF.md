@@ -316,6 +316,48 @@ checkpoint, not just at the end.
   whether to finish resolving those conflicts and open the PR(s), or leave the fork fully independent** --
   waiting on that answer; opening a PR against a third-party repo needs explicit go-ahead regardless.
 
+## Open: state restore (2026-10-02)
+
+- **v0.10.1 (`df7d486`, docs `bbf070d`) added the `"state"` key** to `vst/mnm_engine.cpp` (`saveState`/`loadState`): the
+  wrapper's `effGetChunk`/`effSetChunk` go through `get_param/set_param("state")`, and before this the chunk was empty, so saved
+  projects/programs/plugin presets reloaded as Init. Machinedrum got the same fix (v0.3.4, its own repo).
+- **Works:** plugin preset, default machine (SWAVE SAW), on the developer's Force (log: `SET state (339 bytes)`, patch restored).
+- **Still failing for a tester:** built `v0.10.0-2-gbbf070d` (= current main, fix included), brand-new project, machine **GND NOIS**,
+  saved the project several times. After reload the machine is kept but every knob is default and the preset reads `INIT` with no
+  `*` (before the save it was `INIT *` with edited knobs). Not reproduced here yet. A project saved by 0.10.0 has an empty chunk
+  and can never restore, but that is not this case.
+- **What the screenshot implies:** `INIT` without `*` means either `loadState` never ran, or it ran and the machine branch of
+  `eSet` then fired with a *different* machine value (that branch loads the machine's defaults and calls `markLoaded()`, which
+  clears the star). With the old build MPC's only call on a preset load was `setParameter(machine)`.
+- **Untested:** a non-default machine, and the *project* save/load path (all device tests so far used plugin presets with SAW).
+- **Next steps:**
+  1. Install `dist/Monomodule-0.10.2-dbg5-mpc-armv7.zip` (debug build; the same patch is on local branch `wip/state-trace`, never
+     release it). `touch /tmp/mnm_trace.on` on the Force *before* the plugin is created (`/tmp` is tmpfs, a reboot clears it).
+  2. Repro: new project, Monomodule One, GND NOIS, edit knobs, save the project, reload it. Read `/tmp/mnm_trace.log`: `GET state`
+     (save), `SET state` (load, with machine before/after), `machine change X -> Y` / `machine unchanged, ignored`, and the order of
+     the `set` lines relative to `SET state`.
+  3. If a machine push after `SET state` is what resets it: make `loadState` authoritative (e.g. ignore a machine `set` equal to the
+     restored machine, or re-apply the saved state if it is overwritten right after). If `SET state` never arrives for projects,
+     look at how MPC stores plugin state for a project (compare with the `.xpl` plugin preset format, decoded in this session: the
+     chunk sits inside a JUCE FXB wrapper, base64 with its own alphabet).
+  4. Test Machinedrum (`/home/sam/mpc-vst-machinedrum`, v0.3.4) with a non-default machine too: same design, same risk.
+- **Parked:** local branch `wip/preset-save` (not pushed): `preset_save` key that appends the current sound to
+  `<data dir>/dumps/USER.syx` as a Monomachine kit (`encodeKit`), picked up as bank USER. Engine side only: there is no free skin
+  cell for a button (the empty GLOBAL cell 4 sits under the LEV column), so it needs a skin change in `vst/skin/mk_skin.py`. The
+  parameter is appended last in `gen_params.py` (VST indices are stored in projects: append only).
+- **Gotchas found this session:**
+  - `release/release.sh` pipes the compile through `tail`, so a compile error still ends in "done 0" and packages the *old* `.so`.
+    Check the log for `error:` and that a string you added is in the packaged `.so`.
+  - Never `pkill -f release.sh` from a command that contains that text: it kills its own shell.
+  - The Force's `/data` fills with MPC's skin cache (`/var/tmp/filmstrips`, `temp_*.img`, ~100-300 MB per plugin-screen load).
+    Delete through `/var/tmp/filmstrips` (or after deleting underneath, `echo 2 > /proc/sys/vm/drop_caches`): the overlay mount
+    otherwise pins the blocks until a reboot. A full `/data` makes installs fail (`cp: write error`), leaving a 0-byte
+    `MPC.settings.bak-*`.
+  - MPC does have a per-plugin preset save: `.xpl` files in `/sdcard/Force Documents/Plugin Presets/Instruments/<plugin>/`.
+    `docs/NOTES.md` in `mpc-vst` says it does not; that is wrong (not yet corrected there).
+  - No `v0.10.1` / machinedrum `v0.3.4` git tags or GitHub releases exist (builds are never published: they contain firmware-derived
+    code). Release = push to main + the user builds locally.
+
 ## Resuming
 
 1. Read `libs/dsp56300/docs/ARM32_JIT.md`'s stage list for the current bail-out gate and next step.
