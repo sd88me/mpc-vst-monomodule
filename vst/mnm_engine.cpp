@@ -274,6 +274,29 @@ struct Inst {
         markLoaded();
     }
     void markLoaded() { for (int i = 1; i < kSlotTab; ++i) snap[i] = param[i].load(); }
+    // MPC probes the machine parameter (set another value, then straight back to the original) around the autosampler and
+    // similar; a machine change resets the pages, so a quick A -> B -> A would wipe the patch. Remember the sound that was
+    // replaced and put it back if its machine returns right away.
+    struct Stash { int machine = -1; int param[kSlotTab]; int snapv[kSlotTab]; int presetIdx = 0; std::chrono::steady_clock::time_point t; } stash;
+    void stashSound()
+    {
+        stash.machine = param[kSlotMachine].load();
+        for (int i = 1; i < kSlotTab; ++i) { stash.param[i] = param[i].load(); stash.snapv[i] = snap[i]; }
+        stash.presetIdx = presetIdx;
+        stash.t = std::chrono::steady_clock::now();
+    }
+    bool unstashSound(int machine)
+    {
+        using namespace std::chrono;
+        if (stash.machine != machine || steady_clock::now() - stash.t > milliseconds(500)) return false;
+        const Stash old = stash;
+        stashSound();
+        for (int i = 1; i < kSlotTab; ++i) { param[i].store(old.param[i]); snap[i] = old.snapv[i]; }
+        presetIdx = old.presetIdx;
+        param[kSlotMachine].store(machine);
+        stash.machine = -1;
+        return true;
+    }
     bool modified() const
     {
         for (int i = 1; i < kSlotTab; ++i) if (param[i].load() != snap[i]) return true;
@@ -635,6 +658,8 @@ void eSet(void* p, const char* key, const char* val)
     if (s == kSlotMachine) {
         const int m = std::clamp(v, 0, kNumMachines - 1);
         if (m == in->param[kSlotMachine].load()) return;
+        if (in->unstashSound(m)) return;
+        in->stashSound();
         int d[32];
         defaultsFor(m, d);
         for (int i = 0; i < 32; ++i) in->param[kSlotPages + i].store(d[i]);
