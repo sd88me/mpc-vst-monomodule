@@ -19,7 +19,7 @@ if [ ! -f "$ROOT/libs/monomodule/src/core/firmware/Firmware.h" ] || [ ! -f "$ROO
   echo "submodules missing -- run: git -C '$ROOT' submodule update --init --recursive" >&2
   exit 1
 fi
-docker image inspect mnm-armhf-builder >/dev/null 2>&1 || docker build -q -t mnm-armhf-builder -f "$ROOT/tools/Dockerfile.armhf-builder" "$ROOT" >/dev/null
+docker image inspect mnm-armhf-builder-glibc231 >/dev/null 2>&1 || docker build -q -t mnm-armhf-builder-glibc231 -f "$ROOT/tools/Dockerfile.armhf-builder" "$ROOT" >/dev/null
 docker image inspect mnm-x86-builder >/dev/null 2>&1 || docker build -q -t mnm-x86-builder -f "$ROOT/tools/Dockerfile.x86-builder" "$ROOT" >/dev/null
 
 echo "== 1/4: discovery build (x86) =="
