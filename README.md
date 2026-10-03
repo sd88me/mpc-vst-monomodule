@@ -1,5 +1,8 @@
 # Monomodule for MPC OS
 
+> **Requires MPC OS 3.x.** MPC OS 2.x needs further development: the touchscreen skins do not draw there yet (the page
+> stays empty). See [MPC OS 2.x vs 3.x](https://github.com/sd88me/mpc-vst-plugins#mpc-os-2x-vs-3x) in the main repo.
+
 [Monomodule](https://github.com/shnolk/monomodule) — a chip-accurate emulation of the Elektron
 Monomachine's synth engine — as native VST2 plugins for Akai MPC OS standalone devices (MPC
 Live/One/X/Key, Force). **Monomodule One** is the instrument (15 synth machines); **Monomodule FX**
