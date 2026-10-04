@@ -121,46 +121,86 @@ your own file: **the generated `.syx` is never committed, distributed or include
 
 ## Install
 
-**There is no universal download.** The DSP is static-recompiled ahead of time from your own OS file
-(see "Why this exists" above), and that recompiled code — your OS file's actual DSP program — ends up
-compiled into the plugin binary. So every build is personal: you build it from your own OS file, and
-the result is yours alone to install, never to redistribute.
+**There is no download.** The DSP is static-recompiled ahead of time from your own OS file (see "Why this exists"), and that
+recompiled code ends up inside the plugin. So every build is personal: you build it from your own OS file, and the result is
+yours alone to install, never to redistribute.
 
-**Where to run this: on your own computer (macOS or Linux, with Docker and git), not on the Force.** The build runs
-inside Docker on your computer, and so does the `git clone` below. The Force is only where the finished plugin is
-installed: the `-d <device-ip>` option copies it there over your network and runs the installer, or you copy the zip
-over yourself afterwards (both shown below). Nothing is built or compiled on the device.
+**Where things happen:** the build runs on **your own computer** (macOS, Linux, or Ubuntu inside WSL on Windows), not on the
+Force. The Force only receives the finished plugin. You don't need to be a programmer: follow the steps in order and run the
+check after each one. (The site's [Build page](https://sd88me.github.io/mpc-vst-plugins/build.html) has the same computer setup
+with more detail, and the general [build-it-yourself process](https://sd88me.github.io/mpc-vst-plugins/build.html#plugins-you-build-yourself).)
 
-Needs Docker (and `ssh`/`scp` if you use `-d` below). Everything else — cloning the
-[mpc-vst-plugins](https://github.com/sd88me/mpc-vst-plugins) sibling checkout (shared wrapper and skin
-tooling), version numbering, packaging — is handled for you:
+### Step 1: Get your files and your device's address
 
-```
-git clone --recursive https://github.com/sd88me/mpc-vst-monomodule.git
-cd mpc-vst-monomodule
-release/release.sh <your-os.syx> -d <device-ip>   # ~5 min: build, package, install onto the device
-```
+1. Download the **Monomachine OS 1.32B** `.syx` file from Elektron's website (free) and put it in a folder you can find, for
+   example `~/mono/`. Keep the path free of spaces.
+2. Find your device's IP address (on the Force/MPC: Menu, Preferences, Network; it looks like `192.168.1.44`). The device and
+   your computer must be on the same network.
+3. Make sure SSH works. In a terminal run `ssh root@<device-ip>`. If it asks for a password or logs you in, you're set (type
+   `exit` to leave). If it times out, see "Check that you can reach your device" on the
+   [Install page](https://sd88me.github.io/mpc-vst-plugins/install.html).
 
-That's the whole thing: discovery trace, bit-exactness gate, cross-compile, skins, zip, and (with `-d`)
-scp + install onto the device in one call. Leave off `-d` to just get `dist/Monomodule-<version>-mpc-armv7.zip`
-and install it yourself later:
+### Step 2: Set up your computer (one time)
+
+1. **Open a terminal.** macOS: the Terminal app. Ubuntu: Ctrl+Alt+T. Windows: install Ubuntu in WSL 2 (`wsl --install` in an
+   administrator PowerShell, restart, open "Ubuntu") and run everything below inside it, in your Ubuntu home folder (`cd ~`).
+2. **Install git.** Ubuntu/WSL: `sudo apt update && sudo apt install git`. macOS: `xcode-select --install`.
+   Check: `git --version` prints a version.
+3. **Install Docker** ([Docker Desktop](https://docs.docker.com/desktop/) on macOS/Windows, and start it;
+   [Docker Engine](https://docs.docker.com/engine/install/ubuntu/) on Ubuntu, then `sudo usermod -aG docker $USER` and log out
+   and back in). Check: `docker run --rm hello-world` prints a welcome message.
+4. Have about 10 GB of free disk space (Docker images) for the first build.
+
+### Step 3: Build and install
+
+1. Get the source:
+   ```
+   git clone --recursive https://github.com/sd88me/mpc-vst-monomodule.git
+   cd mpc-vst-monomodule
+   ```
+2. **Save your project on the device**, then build and install in one command (about 5 minutes; the first run downloads more).
+   Put the path to your OS file in quotes:
+   ```
+   release/release.sh "/path/to/your-monomachine-os.syx" -d <device-ip>
+   ```
+3. Watch the output. It stops at the first error and says which step failed. The build runs a **bit-exactness check**
+   against the reference emulator first; if it fails, nothing is built for the device (your OS file or toolchain differs from
+   what this was tested with).
+4. When it finishes, the installer has copied the plugin over, backed up `MPC.settings`, and **restarted MPC once**.
+
+### Step 4: Use it
+
+On the device, add **Monomodule One** (Instrument plugins) or **Monomodule FX** (Insert effects) to a track; both are listed
+under the manufacturer **sd88me**. Save and reload a project once to confirm your sound comes back.
+
+### Alternative: build now, install later
+
+Leave off `-d` to just make the zip, `dist/Monomodule-<version>-mpc-armv7.zip`, then install it yourself:
 
 ```
 scp -r dist/Monomodule-<version>-mpc-armv7 root@<device-ip>:/tmp/
 ssh root@<device-ip> sh /tmp/Monomodule-<version>-mpc-armv7/install.sh
 ```
 
-Either way it installs both **Monomodule One** and **Monomodule FX**, backs up `MPC.settings` first, and
-needs one MPC restart (save your project first) — `release/uninstall.sh` reverses it. The bit-exactness
-gate inside `release.sh` must pass before it builds anything for the device: if it doesn't, something
-about your OS file or toolchain differs from what this was built against, and the build stops rather
-than ship a build that isn't verified correct.
+or drop the zip into the [installer app](https://sd88me.github.io/mpc-vst-plugins/install.html). Either way both plugins are
+installed, `MPC.settings` is backed up first, and MPC restarts once. `release/uninstall.sh` reverses it.
 
-`release.sh` picks a version from `git describe` (or a dated dev version if untagged); pass `-v` to
-override, `-m <checkout>` to point at your own mpc-vst-plugins checkout instead of auto-cloning one, and
-`-l <layout>` for a non-default skin layout. `release/build_from_os.sh` + `release/package.sh` (below)
-are still there individually if you want to run just one step, e.g. while iterating on a single OS file
-across multiple test builds.
+### If something goes wrong
+
+| You see | Usually means |
+|---|---|
+| `docker: permission denied` | Your user isn't in the `docker` group yet: run the `usermod` command above, log out and in. |
+| `Cannot connect to the Docker daemon` | Docker isn't running: start Docker Desktop (or `sudo systemctl start docker`). |
+| `ssh: ... timed out` / `Permission denied` | Wrong IP, different network, or SSH not reachable; see Step 1. |
+| Stops at the bit-exactness check | Wrong OS file or version. Use Monomachine OS **1.32B**. |
+
+Still stuck? Ask on the [Open MPC Discord](https://discord.gg/sRRysZSgu3), pasting the last 20 lines of output.
+
+### Options
+
+`release.sh` picks a version from `git describe` (or a dated dev version if untagged); pass `-v` to override, `-m <checkout>`
+to use your own mpc-vst-plugins checkout instead of auto-cloning one, and `-l <layout>` for a non-default skin layout.
+`release/build_from_os.sh` + `release/package.sh` are there individually if you want one step, e.g. while iterating.
 
 Want the factory kit bank as presets too? `release/extract_factory.sh <your-os.syx> <out.syx>`, then
 copy the result into `/sdcard/Synths/sd88me - VST - Monomodule One/monomodule/dumps/` (see "The factory bank" above).
