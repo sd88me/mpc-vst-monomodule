@@ -4,3 +4,5 @@ dist/
 *.syx
 *.bin
 *.inl
+build-gen2/
+__pycache__/

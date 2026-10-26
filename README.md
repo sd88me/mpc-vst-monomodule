@@ -113,9 +113,25 @@ firmware image, in exactly the byte layout Monomodule's own kit-dump decoder alr
 kit dump — about 77 named kits, covering every machine. This is Elektron's own content extracted from
 your own file: **the generated `.syx` is never committed, distributed or included with this repo.**
 
+## Gen2 (MPC Live III and kin, 64-bit): a normal download
+
+Gen2 MPCs run a 64-bit userland, and there the `dsp56300` JIT works as it is: no recompiling, nothing derived from your OS file
+inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Monomodule-One-<version>-mpc-aarch64.zip` and
+`Monomodule-FX-<version>-mpc-aarch64.zip`, from the catalog or the releases page), with nothing of Elektron's in it.
+
+1. Install the zip(s) like any plugin (the catalog's installer, or `install.sh` inside the zip, as root on the device).
+2. Put your own Monomachine OS file, named `Elektron_SFX6-60_OS1.32B.syx`, in the plugin's `monomodule/` folder in your Synths folder
+   (on a Live III that is `/nvme/Synths/sd88me - VST - Monomodule One/monomodule/`). One copy serves One and FX.
+3. Load the plugin once, then restart MPC. On that first load the plugin makes its skin from the OS file's own LCD artwork (a recipe
+   in the zip says which skin pixel follows which bit of the art, so the skin is exactly the Gen1 one), and it plays from then on.
+
+The JIT is bit-exact with the interpreter on all 22 machines (`release/build_gen2.sh` checks this, on emulated arm64, before it
+packages). Not yet run on a real Gen2 MPC: please report what you find. To build it yourself:
+`release/build_gen2.sh <your-os.syx>` (needs Docker; about 40 minutes, most of it the skin-recipe check).
+
 ## Requirements
 
-- A first-generation MPC OS standalone device (32-bit ARM: Force, MPC Live/Live II, One, X, Key 61).
+- A first-generation MPC OS standalone device (32-bit ARM: Force, MPC Live/Live II, One, X, Key 61), or a Gen2 one (see above).
   Tested on a Force running MPC OS 3.9.1 (see `tested.json`).
 - Root SSH access. Installing plugins this way is unofficial: back up first, use at your own risk.
 - Your own **Monomachine OS file** (tested against OS 1.32B), and optionally any Monomachine kit
@@ -123,7 +139,7 @@ your own file: **the generated `.syx` is never committed, distributed or include
 
 ## Install
 
-**There is no download.** The DSP is static-recompiled ahead of time from your own OS file (see "Why this exists"), and that
+**On Gen1 (32-bit ARM) there is no download.** (Gen2 has one: see above.) The DSP is static-recompiled ahead of time from your own OS file (see "Why this exists"), and that
 recompiled code ends up inside the plugin. So every build is personal: you build it from your own OS file, and the result is
 yours alone to install, never to redistribute.
 

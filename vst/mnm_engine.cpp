@@ -36,6 +36,9 @@
 #include "library/MnmDump.h"
 #include "host/Machines.h"
 
+#include "skin_art.h"
+#include "skin_recipe.h"
+
 extern "C" {
 #include "engine.h"
 }
@@ -230,7 +233,7 @@ Catalog* buildCatalog(const std::vector<std::string>& dirs, uint64_t sig)
 }
 
 struct Inst {
-    std::string osPath;
+    std::string osPath, dataDir;
     std::atomic<int> param[kNumSlots];
     std::atomic<bool> stop{false}, ready{false}, parked{false};
     std::atomic<uint32_t> underruns{0}, blocks{0};
@@ -404,6 +407,39 @@ struct Inst {
     void run();
 };
 
+// The skin, made on the device (the Gen2 download carries no Elektron art): <plugin folder>/skin-recipe/art.bin (vst/skin/skin_recipe.py)
+// says which skin pixel follows which bit of the LCD artwork, and the user's OS file gives the bits (vst/skin_recipe.h). Writes the
+// images of every Monomodule plugin folder found next to this one that has not got them yet, once (a marker file in each). MPC reads
+// skins when it starts, so the new skin shows from the next start. No recipe: nothing to do (Gen1 packages carry the finished skin).
+static void makeSkins(const std::string& dataDir, const std::string& osPath)
+{
+    const auto cut = [](const std::string& p) { const size_t s = p.find_last_of('/'); return s == std::string::npos ? std::string(".") : p.substr(0, s); };
+    const std::string recipe = cut(dataDir) + "/skin-recipe/art.bin";   // <Synths>/<plugin folder>/skin-recipe (dataDir: .../monomodule)
+    struct stat st{}, os{};
+    if (stat(recipe.c_str(), &st) != 0 || stat(osPath.c_str(), &os) != 0) return;
+    const std::string synths = cut(cut(dataDir));
+    const std::string stamp = std::to_string(os.st_size) + " " + std::to_string(st.st_size) + " " + std::to_string(st.st_mtime);
+    std::vector<std::string> made;
+    try {
+        const auto bits = mnm::skinart::bits(osPath);
+        std::string err;
+        const int n = mnm::skin::fill(recipe, bits, [&](const std::string&, const std::string& folder) -> std::string {
+            const std::string dir = synths + "/" + folder;
+            if (!mnm::skin::isDir(dir)) return {};   // that plugin is not installed
+            std::vector<uint8_t> have;
+            if (mnm::skin::readFile(dir + "/" + mnm::skin::kMarker, have) && std::string(have.begin(), have.end()) == stamp) return {};
+            if (std::find(made.begin(), made.end(), dir) == made.end()) made.push_back(dir);
+            return dir;
+        }, err);
+        if (n < 0) { std::fprintf(stderr, "[monomodule] skin: %s\n", err.c_str()); return; }
+        for (const auto& dir : made)
+            if (std::FILE* f = std::fopen((dir + "/" + mnm::skin::kMarker).c_str(), "w")) { std::fputs(stamp.c_str(), f); std::fclose(f); }
+        if (n) std::fprintf(stderr, "[monomodule] skin: %d images made from your OS file (shown from MPC's next start)\n", n);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[monomodule] skin: %s\n", e.what());
+    }
+}
+
 std::unique_ptr<fw::Firmware> loadFw(const std::string& path)
 {
     return std::make_unique<fw::Firmware>(fw::loadFirmware(path));
@@ -415,8 +451,15 @@ void Inst::run()
     std::unique_ptr<fw::Firmware> firmware;
     std::unique_ptr<MonoVoice> voice;
     try {
+        makeSkins(dataDir, osPath);
         firmware = loadFw(osPath);
         voice = std::make_unique<MonoVoice>(*firmware);
+#ifndef DSP56K_RECOMP
+        // The JIT compiles a machine's code the first time it runs (5-30 ms, heard as a dropout at a machine's first note or when
+        // the machine changes). Render every machine once, silently, before "ready", then back to a fresh voice with the code kept
+        // (about 0.25 s per instance on x86; bit-exact, mnm-golden MNM_PREWARM=1). MNM_PREWARM=0 skips it.
+        if (!std::getenv("MNM_PREWARM") || std::atoi(std::getenv("MNM_PREWARM")) != 0) voice->prewarm();
+#endif
         voice->host().setMachine(kMachines[param[kSlotMachine].load()]);
 #if MNM_FX
         voice->host().setRouting(host::dspInputBits(host::FxInput::InpAB));
@@ -576,13 +619,27 @@ void Inst::run()
 
 void* eCreate(const char* dataDir)
 {
-    // the JIT path has no 32-bit ARM backend; the recompiled interpreter is the only one that works there
+#ifdef DSP56K_RECOMP
+    // Gen1: the JIT has no 32-bit ARM backend; the recompiled interpreter is the only one that works there. Gen2 (aarch64) runs the JIT.
     setenv("MNM_DSP_INTERP", "1", 0);
+#endif
     auto* in = new Inst();
     if (access("/tmp/mnm_trace.on", F_OK) == 0) in->trace = std::fopen("/tmp/mnm_trace.log", "a");
     if (const char* p = std::getenv("MNM_OS")) in->osPath = p;
     else in->osPath = std::string(dataDir && *dataDir ? dataDir : ".") + "/Elektron_SFX6-60_OS1.32B.syx";
     const std::string base = dataDir && *dataDir ? dataDir : ".";
+    in->dataDir = base;
+    // One OS file serves both plugins: when this plugin's folder has none, the other Monomodule plugin's folder may
+    if (access(in->osPath.c_str(), R_OK) != 0 && !std::getenv("MNM_OS")) {
+        const size_t sl = base.find_last_of('/'), sl2 = sl == std::string::npos ? sl : base.find_last_of('/', sl - 1);
+        if (sl2 != std::string::npos) {
+            const std::string synths = base.substr(0, sl2);
+            for (const char* other : {"sd88me - VST - Monomodule One", "sd88me - VST - Monomodule FX"}) {
+                const std::string cand = synths + "/" + other + "/" + base.substr(sl + 1) + "/Elektron_SFX6-60_OS1.32B.syx";
+                if (access(cand.c_str(), R_OK) == 0) { in->osPath = cand; break; }
+            }
+        }
+    }
     in->dumpDirs = {base + "/dumps", "/sdcard/Force Documents/Monomachine Dumps"};   // manual copy (SD card) and MPC's own Documents browser
     in->catTh = std::thread([in] {
         while (!in->stop.load(std::memory_order_acquire)) {
