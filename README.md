@@ -71,10 +71,11 @@ requires it):
   upstream is a fixed-size JUCE window; MPC's screen and skin format need a purpose-built layout.
 - **A hardware-style chassis** for the default `2x2` layout: a brushed-aluminium faceplate and thin bezel around
   one LCD whose left and right edges sit a fixed margin (`lcd_margin=28` px) outside the page panels.
-- **A bank selector** alongside the PREV/NEXT preset stepper, so you can narrow browsing to one
-  `.syx` dump at a time instead of every loaded dump pooled together. Upstream has a full scrollable
-  library browser; MPC's plugin skins can't render a list whose length isn't known at build time (see
-  "Presets and banks" below), so this is the closest equivalent MPC allows.
+- **Bank and preset lists** (Gen2 build): tap the BANK or PRESET field and a list opens with the names of your own dumps
+  and sounds, 24 to a page (PREV/NEXT page for presets); the arrows still step. Upstream has a full scrollable library
+  browser; MPC's plugin skins can't change a list's length at run time, so these are fixed 24-slot lists whose
+  names are live text (see "Presets and banks" below).
+- **Native Q-Link outlines**: MPC outlines (orange box with a Q) the four knobs the Q-Links currently drive, one box per Q-Link column.
 - **Three randomise buttons** (RND SYN, RND A/F, RND LFO) — not in upstream at all.
 - **Master tune and LPF/HPF key-tracking controls** exposed on-screen — upstream's engine supports
   both, but its own One editor doesn't expose them as knobs; we did, in the spare space next to LEV.
@@ -101,9 +102,11 @@ Where sounds come from:
 The **BANK** stepper (above PRESET) narrows this to one `.syx` file at a time; its default, "ALL",
 pools everything together as before. A `*` after a preset's name means you've edited it since loading.
 
-There is **no tap-to-open scrollable list**. MPC's plugin skins require every option to be a
-pre-rendered image baked in at build time, so a list whose length changes at runtime (as you add
-dumps) can't be built as a real on-screen list — PREV/NEXT/BANK stepping is the closest MPC allows.
+Tap the **BANK** or **PRESET** field to open a list (Gen2 build): bank names (the first 24), or this machine's sounds in the
+selected bank, 24 per page with PREV/NEXT. A pick loads it and closes the list; tap the field again to close without
+picking. The current one is outlined. Both lists share the same screen area, so close one before opening the other.
+The list's names are live text, so a new dump shows up as soon as the plugin rescans; a bank list longer than 24 only
+shows the first 24 (the arrows reach the rest).
 
 ### The factory bank
 

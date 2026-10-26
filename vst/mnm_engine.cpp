@@ -19,6 +19,7 @@
 #include <cctype>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <algorithm>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -323,25 +324,89 @@ struct Inst {
         if (const Catalog* c = cat.load()) for (auto& b : c->banks) out.push_back(b);
         return out;
     }
-    void stepBank(int dir)
+    int bankIndex() const
     {
         const auto banks = bankList();
-        int idx = 0;
-        for (size_t i = 0; i < banks.size(); ++i) if (banks[i] == bankName) { idx = int(i); break; }
-        const int n = int(banks.size());
-        idx = ((idx + dir) % n + n) % n;
+        for (size_t i = 0; i < banks.size(); ++i) if (banks[i] == bankName) return int(i);
+        return 0;
+    }
+    void selectBank(int idx)
+    {
+        const auto banks = bankList();
+        if (idx < 0 || idx >= int(banks.size())) return;
         bankName = banks[size_t(idx)];
         presetIdx = 0;   // the current selection may not exist in the new bank: fall back to Init, as a machine change does
+        pageSeen = -1;
         markLoaded();
+    }
+    void stepBank(int dir)
+    {
+        const int n = int(bankList().size());
+        selectBank(((bankIndex() + dir) % n + n) % n);
     }
     std::string bankLabel() const { return bankName.empty() ? "ALL" : bankName; }
     void stepPreset(int dir)
     {
         const int ms = param[kSlotMachine].load();
+        const int n = 1 + int(soundsFor(int(kMachines[ms])).size());
+        selectPreset((presetIdx + dir + n) % n);
+    }
+    // the preset list popup: kPickSlots entries per page, entry 0 of page 0 is Init
+    static constexpr int kPickSlots = 32, kBankSlots = 24;   // entries per page: the preset list is 4 x 8, the bank list 3 x 8
+    int pageNum = 0, pageSeen = 0, bankPageNum = 0, bankPageSeen = 0;
+    std::mutex pickMu;
+    std::vector<std::string> pickNames;   // INIT + the machine's sounds in the selected bank, upper case; rebuilt when the key changes
+    const Catalog* pickCat = nullptr; int pickMachine = -1; std::string pickBank;
+    const std::vector<std::string>& pickList()   // pickMu held
+    {
+        const int ms = param[kSlotMachine].load();
+        const Catalog* c = cat.load();
+        if (c != pickCat || ms != pickMachine || bankName != pickBank || pickNames.empty()) {
+            pickCat = c; pickMachine = ms; pickBank = bankName;
+            pickNames.assign(1, "INIT");
+            for (int i : soundsFor(int(kMachines[ms]))) {
+                std::string n = c->sounds[size_t(i)].name;
+                for (auto& ch : n) ch = char(toupper(static_cast<unsigned char>(ch)));
+                pickNames.push_back(n);
+            }
+        }
+        return pickNames;
+    }
+    int pages() { std::lock_guard<std::mutex> g(pickMu); return (int(pickList().size()) + kPickSlots - 1) / kPickSlots; }
+    int page()   // follows the current preset until the pager is used
+    {
+        if (presetIdx != pageSeen) { pageSeen = presetIdx; pageNum = presetIdx / kPickSlots; }
+        return pageNum;
+    }
+    int bankPages() const { return (int(bankList().size()) + kBankSlots - 1) / kBankSlots; }
+    int bankPage()
+    {
+        const int bi = bankIndex();
+        if (bi != bankPageSeen) { bankPageSeen = bi; bankPageNum = bi / kBankSlots; }
+        return bankPageNum;
+    }
+    void stepBankPage(int dir) { const int p = bankPage() + dir; if (p >= 0 && p < bankPages()) bankPageNum = p; }
+    void stepPage(int dir) { const int p = page() + dir; if (p >= 0 && p < pages()) pageNum = p; }
+    std::string pickEntry(int k)
+    {
+        std::lock_guard<std::mutex> g(pickMu);
+        const auto& l = pickList();
+        const size_t i = size_t(page()) * kPickSlots + size_t(k);
+        return i < l.size() ? l[i] : std::string();
+    }
+    void pickPreset(int k)
+    {
+        std::unique_lock<std::mutex> g(pickMu);
+        const int idx = page() * kPickSlots + k;
+        const bool ok = k >= 0 && k < kPickSlots && idx < int(pickList().size());
+        g.unlock();
+        if (ok) selectPreset(idx);
+    }
+    void selectPreset(int idx)
+    {
+        const int ms = param[kSlotMachine].load();
         const auto list = soundsFor(int(kMachines[ms]));
-        const int n = 1 + int(list.size());
-        int idx = (presetIdx + dir) % n;
-        if (idx < 0) idx += n;
+        if (idx < 0 || idx > int(list.size())) return;
         if (idx == 0) { loadInit(ms); return; }
         const Catalog* c = cat.load();
         const auto& snd = c->sounds[size_t(list[size_t(idx - 1)])];
@@ -703,6 +768,20 @@ void eSet(void* p, const char* key, const char* val)
         if (std::atof(val) > 0.5) in->stepBank(key[5] == 'n' ? 1 : -1);
         return;
     }
+    if (!std::strcmp(key, "bank_pick")) {
+        const int k = int(std::lround(std::atof(val)));
+        if (k >= 0 && k < Inst::kBankSlots) in->selectBank(in->bankPage() * Inst::kBankSlots + k);
+        return;
+    }
+    if (!std::strcmp(key, "bank_pgprev") || !std::strcmp(key, "bank_pgnext")) {
+        if (std::atof(val) > 0.5) in->stepBankPage(key[7] == 'n' ? 1 : -1);
+        return;
+    }
+    if (!std::strcmp(key, "preset_pick")) { in->pickPreset(int(std::lround(std::atof(val)))); return; }
+    if (!std::strcmp(key, "preset_pgprev") || !std::strcmp(key, "preset_pgnext")) {
+        if (std::atof(val) > 0.5) in->stepPage(key[9] == 'n' ? 1 : -1);
+        return;
+    }
     if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && !std::strcmp(key + 4, "_pagesel")) {
         const int idx = std::clamp(int(std::lround(std::atof(val))), 0, 8);
         in->param[kSlotLfo + (key[3] - '1') * 8].store(listRawMid9(idx));
@@ -722,6 +801,7 @@ void eSet(void* p, const char* key, const char* val)
         for (int i = 0; i < 32; ++i) in->param[kSlotPages + i].store(d[i]);
         in->param[kSlotMachine].store(m);
         in->presetIdx = 0;   // a new machine starts from its Init
+        in->pageSeen = -1;
         in->markLoaded();
         return;
     }
@@ -735,6 +815,25 @@ int eGet(void* p, const char* key, char* buf, int len)
     if (!std::strcmp(key, "preset_name")) return std::snprintf(buf, size_t(len), "%s", in->presetName().c_str());
     if (!std::strcmp(key, "bank_name")) return std::snprintf(buf, size_t(len), "%s", in->bankLabel().c_str());
     if (!std::strcmp(key, "bank_prev") || !std::strcmp(key, "bank_next")) return std::snprintf(buf, size_t(len), "0");
+    if (!std::strcmp(key, "bank_pick")) {
+        const int k = in->bankIndex() - in->bankPage() * Inst::kBankSlots;
+        return std::snprintf(buf, size_t(len), "%d", k >= 0 && k < Inst::kBankSlots ? k : Inst::kBankSlots);
+    }
+    if (!std::strcmp(key, "bank_page")) return std::snprintf(buf, size_t(len), "PAGE %d/%d", in->bankPage() + 1, std::max(in->bankPages(), 1));
+    if (!std::strcmp(key, "bank_pgprev") || !std::strcmp(key, "bank_pgnext")) return std::snprintf(buf, size_t(len), "0");
+    if (!std::strncmp(key, "bank_s", 6) && std::isdigit(static_cast<unsigned char>(key[6]))) {
+        const auto banks = in->bankList();
+        const size_t k = size_t(in->bankPage() * Inst::kBankSlots + std::atoi(key + 6));
+        return std::snprintf(buf, size_t(len), "%s", k >= banks.size() ? "" : k == 0 ? "ALL" : banks[k].c_str());
+    }
+    if (!std::strcmp(key, "preset_pick")) {
+        const int k = in->presetIdx - in->page() * Inst::kPickSlots;
+        return std::snprintf(buf, size_t(len), "%d", k >= 0 && k < Inst::kPickSlots ? k : Inst::kPickSlots);
+    }
+    if (!std::strncmp(key, "preset_s", 8) && std::isdigit(static_cast<unsigned char>(key[8])))
+        return std::snprintf(buf, size_t(len), "%s", in->pickEntry(std::atoi(key + 8)).c_str());
+    if (!std::strcmp(key, "preset_page")) return std::snprintf(buf, size_t(len), "PAGE %d/%d", in->page() + 1, std::max(in->pages(), 1));
+    if (!std::strcmp(key, "preset_pgprev") || !std::strcmp(key, "preset_pgnext")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "lfo23dest")) {   // DEST's view of the LFO2|LFO3 page: tab * 9 + that LFO's PAGE list index
         const int tab = std::clamp(in->param[kSlotTab].load(), 0, 1);
