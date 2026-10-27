@@ -382,3 +382,27 @@ checkpoint, not just at the end.
   clone and silently omits it). Never release these.
 - **Build gotcha:** `/tmp` here is a 9.8 GB tmpfs that fills up; run the build with `TMPDIR=~/tmpbuild`.
 - **Open:** Machinedrum (`/home/sam/mpc-vst-machinedrum`) likely has the same machine-probe reset; check its trace before assuming.
+
+## 2026-10-27: Gen2 (aarch64) download, lists, Q-Link outlines (v0.11.0, released)
+**State.** `v0.11.0` is published (sd88me/mpc-vst-monomodule): `Monomodule-One-0.11.0-mpc-aarch64.zip`, `Monomodule-FX-0.11.0-mpc-aarch64.zip`
+(nothing of Elektron's inside; the user drops `Elektron_SFX6-60_OS1.32B.syx` in the plugin's `monomodule/` folder). Catalog: Gen2-only release entries
+`monomodule-one-gen2`, `monomodule-fx-gen2` (mpc-vst-plugins #566, #569) beside the Gen1 build-yourself `monomodule` entry. Tested on a Live III (`tested.json`).
+- **Build:** `release/build_gen2.sh <OS .syx> -v <ver> [-m <mpc-vst-plugins checkout>] [-s]`: aarch64 `.so` (JIT + load-time `prewarm`), bit-exactness gate (aarch64 JIT under QEMU vs the
+  x86 interpreter, 22 machines; `-s` skips), skin recipe (about 15 min), two zips, `catalog_check`. The zips' manifest ids are `-gen2` (they must not collide with the build-yourself
+  entry's component ids). `GEN_VST_RELOCK=1` accepts a params.lock change (the lock files are untracked).
+- **Skin recipe:** `vst/skin/skin_recipe.py` (art.bin of base images + pixel->art-bit rectangles) and `vst/skin_recipe.h` (device side); `vst/skin_art.h` gives the art bits.
+  The plugin makes the skin into every installed Monomodule folder on load ("shown from MPC's next start": restart MPC once).
+- **Bank/preset lists:** tap the BANK/PRESET field; `bank_s0..23` / `preset_s0..31` are live-text string params, `bank_pick` / `preset_pick` option params carry the pick, `*_pgprev/next` page,
+  `*_open` is the popup flag (`popup_of`). A slot is one control (Data = pick, Text = its string) with a near-invisible hit plate on top, or the caption eats the tap.
+  The Q-Link outline (native, `qlinkBoundsData` per column, `ss.QLINK_COLUMNS`) draws over an open list: cosmetic.
+- **Params:** appended after the old ones (never reorder; Gen1 projects bind by index).
+- **Benchmarks (Live III, MPC running, `mnm-vst-smoke`):** One 24-45% of its DSP thread by machine, FX 29-43%, 0 underruns; four engines at once were fine.
+
+**Open items**
+1. **FX inside the main plugin** (parked for the next version): one or two FX slots/pages in One that take only the plugin's own stereo stream as input (NEIBOR). Unknown whether
+   MPC feeds an instrument plugin audio; the FX machines need audio in. Test by building One with inputs, or put the FX machines behind the synth's own output internally.
+2. **Real-session CPU:** per-thread CPU while MPC plays real notes (busybox `top` has no threads; read `/proc/<pid>/task/*/stat`, see the Machinemodule handoff). Not done for One/FX.
+3. **Other Gen2 models** (MPC One+/X/Key) are untried; the catalog says Gen2 only.
+4. **Gen2 `INSTALL.md`** in the zips still says "first-generation, 32-bit ARM, /sdcard/Synths": it comes from the shared `release.py` in mpc-vst-plugins (fix there; the installer itself handles aarch64 and `-t /nvme/Synths`).
+5. **Catalog nightly:** check the nightly build lists v0.11.0 for the two `-gen2` entries and the screenshots resolve.
+6. The preset list shows 32 per page for the selected machine only; a very large dump set is 7+ pages (fine), banks past 24 are reachable only with the arrows.
