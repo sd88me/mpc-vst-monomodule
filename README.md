@@ -130,6 +130,7 @@ inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Mo
 
 ![Monomodule One on an MPC Live III](docs/img/monomodule-gen2.png)
 ![The preset list: 32 sounds a page, from your dumps](docs/img/monomodule-gen2-presets.png)
+![Monomodule FX on an MPC Live III](docs/img/monomodule-fx-gen2.png)
 
 Tap BANK or PRESET to open the lists (24 banks and 32 sounds a page, PREV/NEXT page); MPC outlines the four knobs the Q-Links drive.
 
