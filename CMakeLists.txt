@@ -49,9 +49,9 @@ foreach(variant one fx)
     set(_smoke mnm-vst-smoke-fx)
   endif()
 
-  add_library(${_target} SHARED vst/mnm_engine.cpp ${MNM_CORE}/library/MnmDump.cpp ${MPC_VST_DIR}/wrapper/vst2_wrap.c)
+  add_library(${_target} SHARED vst/mnm_engine.cpp ${MNM_CORE}/library/MnmDump.cpp ${MNM_CORE}/../plugin/one/RomArt.cpp ${MPC_VST_DIR}/wrapper/vst2_wrap.c)
   target_compile_definitions(${_target} PRIVATE MNM_FX=${_fx})
-  target_include_directories(${_target} PRIVATE ${MPC_VST_DIR}/wrapper ${_paramsdir})
+  target_include_directories(${_target} PRIVATE ${MPC_VST_DIR}/wrapper ${_paramsdir} vst ${MNM_CORE}/../plugin/one)
   target_link_libraries(${_target} PRIVATE mnmcore pthread)
   set_target_properties(${_target} PROPERTIES PREFIX "" C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden)
   # --exclude-libs,ALL,-Bsymbolic: two instances of this plugin (One and FX) link the same static mnmcore/
@@ -59,9 +59,9 @@ foreach(variant one fx)
   # single process (each .so must keep its own copy private, not share the first one loaded).
   target_link_options(${_target} PRIVATE -Wl,--no-undefined,--exclude-libs,ALL,-Bsymbolic -static-libstdc++ -static-libgcc)
 
-  add_executable(${_smoke} vst/smoke.cpp vst/mnm_engine.cpp ${MNM_CORE}/library/MnmDump.cpp)
+  add_executable(${_smoke} vst/smoke.cpp vst/mnm_engine.cpp ${MNM_CORE}/library/MnmDump.cpp ${MNM_CORE}/../plugin/one/RomArt.cpp)
   target_compile_definitions(${_smoke} PRIVATE MNM_FX=${_fx})
-  target_include_directories(${_smoke} PRIVATE ${MPC_VST_DIR}/wrapper)
+  target_include_directories(${_smoke} PRIVATE ${MPC_VST_DIR}/wrapper vst ${MNM_CORE}/../plugin/one)
   target_link_libraries(${_smoke} PRIVATE mnmcore pthread)
 endforeach()
 endif()
@@ -74,3 +74,9 @@ target_link_libraries(mnm-golden PRIVATE mnmcore)
 
 add_executable(mnm-recomp-discover "${MNM_DSP56300_DIR}/tools/arm32jit_prototype/recomp/mnm_recomp_discover.cpp")
 target_link_libraries(mnm-recomp-discover PRIVATE mnmcore ${CMAKE_DL_LIBS})
+
+# mnm-skin-gen: fills a skin recipe (vst/skin/skin_recipe.py) in from an OS file, as the plugin does on the device (vst/skin_recipe.h);
+# the test that the device writes the generator's skin (vst/skin/check_skin_gen.py).
+add_executable(mnm-skin-gen vst/skin/mnm_skingen.cpp ${MNM_CORE}/../plugin/one/RomArt.cpp)
+target_include_directories(mnm-skin-gen PRIVATE vst ${MNM_CORE}/../plugin/one)
+target_link_libraries(mnm-skin-gen PRIVATE mnmcore)

@@ -604,6 +604,532 @@
    "min": 0,
    "max": 0,
    "display": "string"
+  },
+  {
+   "key": "bank_open",
+   "name": "Bank List",
+   "options": [
+    "Closed",
+    "Open"
+   ],
+   "default": 0,
+   "popup_of": "bank_pick"
+  },
+  {
+   "key": "bank_pick",
+   "name": "Bank Pick",
+   "options": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "-"
+   ],
+   "default": 24
+  },
+  {
+   "key": "bank_s0",
+   "name": "Bank 1",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s1",
+   "name": "Bank 2",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s2",
+   "name": "Bank 3",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s3",
+   "name": "Bank 4",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s4",
+   "name": "Bank 5",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s5",
+   "name": "Bank 6",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s6",
+   "name": "Bank 7",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s7",
+   "name": "Bank 8",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s8",
+   "name": "Bank 9",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s9",
+   "name": "Bank 10",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s10",
+   "name": "Bank 11",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s11",
+   "name": "Bank 12",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s12",
+   "name": "Bank 13",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s13",
+   "name": "Bank 14",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s14",
+   "name": "Bank 15",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s15",
+   "name": "Bank 16",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s16",
+   "name": "Bank 17",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s17",
+   "name": "Bank 18",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s18",
+   "name": "Bank 19",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s19",
+   "name": "Bank 20",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s20",
+   "name": "Bank 21",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s21",
+   "name": "Bank 22",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s22",
+   "name": "Bank 23",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_s23",
+   "name": "Bank 24",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "bank_pgprev",
+   "name": "Bank Page Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "bank_pgnext",
+   "name": "Bank Page Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "bank_page",
+   "name": "Bank Page",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_open",
+   "name": "Preset List",
+   "options": [
+    "Closed",
+    "Open"
+   ],
+   "default": 0,
+   "popup_of": "preset_pick"
+  },
+  {
+   "key": "preset_pick",
+   "name": "Preset Pick",
+   "options": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "30",
+    "31",
+    "32",
+    "-"
+   ],
+   "default": 32
+  },
+  {
+   "key": "preset_s0",
+   "name": "Preset 1",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s1",
+   "name": "Preset 2",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s2",
+   "name": "Preset 3",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s3",
+   "name": "Preset 4",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s4",
+   "name": "Preset 5",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s5",
+   "name": "Preset 6",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s6",
+   "name": "Preset 7",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s7",
+   "name": "Preset 8",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s8",
+   "name": "Preset 9",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s9",
+   "name": "Preset 10",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s10",
+   "name": "Preset 11",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s11",
+   "name": "Preset 12",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s12",
+   "name": "Preset 13",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s13",
+   "name": "Preset 14",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s14",
+   "name": "Preset 15",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s15",
+   "name": "Preset 16",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s16",
+   "name": "Preset 17",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s17",
+   "name": "Preset 18",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s18",
+   "name": "Preset 19",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s19",
+   "name": "Preset 20",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s20",
+   "name": "Preset 21",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s21",
+   "name": "Preset 22",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s22",
+   "name": "Preset 23",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s23",
+   "name": "Preset 24",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s24",
+   "name": "Preset 25",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s25",
+   "name": "Preset 26",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s26",
+   "name": "Preset 27",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s27",
+   "name": "Preset 28",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s28",
+   "name": "Preset 29",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s29",
+   "name": "Preset 30",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s30",
+   "name": "Preset 31",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_s31",
+   "name": "Preset 32",
+   "min": 0,
+   "max": 0,
+   "display": "string"
+  },
+  {
+   "key": "preset_pgprev",
+   "name": "Preset Page Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "preset_pgnext",
+   "name": "Preset Page Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true
+  },
+  {
+   "key": "preset_page",
+   "name": "Preset Page",
+   "min": 0,
+   "max": 0,
+   "display": "string"
   }
  ],
  "sections": [

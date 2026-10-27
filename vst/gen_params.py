@@ -60,6 +60,23 @@ if not FX:
   params.append({"key": "master_tune", "name": "Master Tune", "min": 400, "max": 440, "default": 440, "unit": "Hz", "display": "int"})
   params.append({"key": "lpf_key", "name": "LPF Key Track", "options": ["OFF", "ON"], "default": 1})
   params.append({"key": "hpf_key", "name": "HPF Key Track", "options": ["OFF", "ON"], "default": 1})
+# bank and preset pop-up lists (appended after everything above; never reorder). Each slot's text is a live string param;
+# the *_pick option params carry the choice back (bank k / entry k of the preset page); *_open are the lists' open flags.
+BANK_SLOTS, PRESET_SLOTS = 24, 32   # entries per page of the two lists (the skin's 3 x 8 and 4 x 8 grids)
+params.append({"key": "bank_open", "name": "Bank List", "options": ["Closed", "Open"], "default": 0, "popup_of": "bank_pick"})
+params.append({"key": "bank_pick", "name": "Bank Pick", "options": [str(k + 1) for k in range(BANK_SLOTS)] + ["-"], "default": BANK_SLOTS})
+for k in range(BANK_SLOTS):
+    params.append({"key": "bank_s%d" % k, "name": "Bank %d" % (k + 1), "min": 0, "max": 0, "display": "string"})
+params.append({"key": "bank_pgprev", "name": "Bank Page Prev", "min": 0, "max": 1, "momentary": True})
+params.append({"key": "bank_pgnext", "name": "Bank Page Next", "min": 0, "max": 1, "momentary": True})
+params.append({"key": "bank_page", "name": "Bank Page", "min": 0, "max": 0, "display": "string"})
+params.append({"key": "preset_open", "name": "Preset List", "options": ["Closed", "Open"], "default": 0, "popup_of": "preset_pick"})
+params.append({"key": "preset_pick", "name": "Preset Pick", "options": [str(k + 1) for k in range(PRESET_SLOTS)] + ["-"], "default": PRESET_SLOTS})
+for k in range(PRESET_SLOTS):
+    params.append({"key": "preset_s%d" % k, "name": "Preset %d" % (k + 1), "min": 0, "max": 0, "display": "string"})
+params.append({"key": "preset_pgprev", "name": "Preset Page Prev", "min": 0, "max": 1, "momentary": True})
+params.append({"key": "preset_pgnext", "name": "Preset Page Next", "min": 0, "max": 1, "momentary": True})
+params.append({"key": "preset_page", "name": "Preset Page", "min": 0, "max": 0, "display": "string"})
 out = os.path.join("fx", "params.json") if FX else "params.json"
 os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
 json.dump({"name": "Monomodule FX" if FX else "Monomodule One", "params": params,

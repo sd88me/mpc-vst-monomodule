@@ -26,6 +26,7 @@ from PIL import Image, ImageDraw, ImageOps
 TOOLS = os.environ.get("MPC_VST_TOOLS") or os.path.join(os.path.expanduser("~"), "mpc-vst", "tools")
 sys.path.insert(0, TOOLS)
 import shadow_skin as ss  # noqa: E402  (TUI.json helpers shared with the other ports)
+ss.QLINK_COLUMNS = True   # native Q-Link outlines: one box per Q-Link column on each page (see qlink_boxes)
 
 # options: skin.conf (key=value lines next to this script) overridden by name=value arguments
 args = {}
@@ -803,7 +804,7 @@ arrow_w = 12
 row_w = strip_w - 2 * (arrow_w - 1)
 
 
-def build_row(label, y, prev_key, next_key, name_key, tab):
+def build_row(label, y, prev_key, next_key, name_key, tab, open_key):
     """PREV / <label> / NEXT, with a live-text name field: upstream's PresetStrip minus the library parts,
     generalised so BANK (below PRESET) can reuse it."""
     prev_r, mid_r, next_r = (0, arrow_w), (arrow_w - 1, row_w), (arrow_w - 1 + row_w - 1, arrow_w)
@@ -836,6 +837,10 @@ def build_row(label, y, prev_key, next_key, name_key, tab):
     nkey = "mnm%sName" % label
     defs[nkey] = ss._local(nkey, [], [ss._value_label(0, 0, name_w_lcd * S, 11 * S, 30.0, "%02x%02x%02x" % INK, "left verticallyCentred")])
     place(nkey, "%s name" % label, PIDX[name_key], strip_x + name_x_lcd * S, y + 2 * S, name_w_lcd * S, 11 * S, focus="No", tab=tab)
+    fkey = "mnm%sField" % label   # a tap on the name opens the list
+    defs[fkey] = ss._local(fkey, [ss._action("Mouse Down", "Toggle Switch"), ss._action("Enter Pressed", "Toggle Switch")],
+                           [ss._focus(row_w * S, STRIP_H * S)])   # after the label: the label would take the tap
+    place(fkey, "%s list" % label, PIDX[open_key], strip_x + mid_r[0] * S, y, mid_r[1] * S, STRIP_H * S, focus="Yes", tab=tab)
 
 
 STRIP_GAP = 1   # LCD rows between PRESET and BANK (distinct from ROW_GAP, the gap between page rows)
@@ -848,8 +853,8 @@ else:
     stack_h = (2 * STRIP_H + STRIP_GAP) * S
     preset_y = OY + TOP - stack_h - 2 * S   # bottom-anchored just above the page title bars, whatever BAR_ROWS is
     bank_y = preset_y + (STRIP_H + STRIP_GAP) * S
-build_row("BANK", preset_y, "bank_prev", "bank_next", "bank_name", 0 if GRID else None)
-build_row("PRESET", bank_y, "preset_prev", "preset_next", "preset_name", 0 if GRID else None)
+build_row("BANK", preset_y, "bank_prev", "bank_next", "bank_name", 0 if GRID else None, "bank_open")
+build_row("PRESET", bank_y, "preset_prev", "preset_next", "preset_name", 0 if GRID else None, "preset_open")
 
 # knob cells
 TOUCH_INSET = 2                                     # LCD px kept clear at the cell's edges
@@ -1139,6 +1144,73 @@ for mi, m in enumerate(MACHINES):
           img=imgs["on"] if mi == PREVIEW_MACHINE else imgs["off"])
 on_top += parts
 
+# ------------------------------------------------- bank / preset lists (live text slots) ---------------------------------
+# Like the machine list, but every entry's name is a string param (bank_sK / preset_sK) the plugin fills from the dumps at run
+# time: a slot is one control (Data = the pick param, Text = its string) whose button images are the same for every slot.
+LP_X, LP_Y, LP_W, LP_H = OX + PAGES_X0, OY + TOP - TAB_OVERHANG * S, PAGES_W, WIN_H - 8 - (TOP - TAB_OVERHANG * S)
+LP_ROWS, LP_HEAD, LP_FOOT, LP_PAD = 8, 56, 64, 10
+
+
+def list_panel(title, key, pick_key, slot_fmt, open_key, page_key, LP_COLS):
+    foot = LP_FOOT
+    panel = Image.new("RGB", (LP_W, LP_H), PAPER)
+    pd = ImageDraw.Draw(panel)
+    pd.rectangle([0, 0, LP_W - 1, LP_H - 1], outline=INK, width=BORDER)
+    pd.rectangle([BORDER, BORDER, LP_W - BORDER - 1, LP_HEAD - 1], fill=INK)
+    tw = text_width(F["bold8"], title) * S
+    px_text(panel, F["bold8"], title, LP_W // 2 - tw // 2, LP_HEAD // 2 - F["bold8"].h * S // 2, S, PAPER)
+    cw = (LP_W - 2 * BORDER - 2 * LP_PAD) // LP_COLS
+    rh = (LP_H - LP_HEAD - foot - 2 * LP_PAD - BORDER) // LP_ROWS
+    gx, gy = BORDER + LP_PAD, LP_HEAD + LP_PAD
+    for r_ in range(1, LP_ROWS):
+        for c_ in range(LP_COLS):
+            dotted_h(pd, gx + c_ * cw + 6, gx + (c_ + 1) * cw - 6, gy + r_ * rh - 1)
+    fn_panel = save_png(key + "_panel", panel)
+    off = Image.new("RGB", (cw, rh), PAPER)
+    on = Image.new("RGB", (cw, rh), PAPER)
+    ImageDraw.Draw(on).rectangle([2, 2, cw - 3, rh - 3], outline=INK, width=4)
+    fn_on, fn_off = save_png(key + "_on", on), save_png(key + "_off", off)
+    open_c = enabling(open_key, 1, 2)
+    kids_ = []
+    pkey = key + "Panel"
+    defs[pkey] = ss._local(pkey, [], [ss._sub("Image", {"version": 2, "imageType": "Regular", "colour": "0", "image": fn_panel}, ss._bounds(0, 0, LP_W, LP_H), "Image")])
+    place(pkey, "%s list" % title, PIDX[open_key], LP_X, LP_Y, LP_W, LP_H, focus="No", cond=open_c, kids=kids_, img=fn_panel)
+    n = LP_COLS * LP_ROWS
+    hit = ss.write_hit_png(SKIN, cw, rh)
+    skey = key + "Slot"
+    for k in range(n):
+        c_, r_ = k // LP_ROWS, k % LP_ROWS
+        # one definition per slot: the button's id is the pick value this slot sends
+        sk = "%s_%02d" % (skey, k)
+        defs[sk] = ss._local(sk, [ss._action("Mouse Down", "Q-Link")],
+                             [ss._button(fn_on, fn_off, k, len(params[PIDX[pick_key]]["options"]), cw, rh),
+                              ss._value_label(14, 0, cw - 28, rh, 28.0, "%02x%02x%02x" % INK, "left verticallyCentred", handle="Text"),
+                              ss._button(hit, hit, k, len(params[PIDX[pick_key]]["options"]), cw, rh)])   # the caption would take the tap
+        place(sk, "%s %d" % (title, k + 1), PIDX[pick_key], LP_X + gx + c_ * cw, LP_Y + gy + r_ * rh, cw, rh, focus="No", cond=open_c, kids=kids_,
+              extra={"Text": PIDX[slot_fmt % k]}, img=fn_off)
+    if True:
+        fy = LP_Y + LP_H - foot - BORDER + 6
+        bw, bh = 220, foot - 18
+        for label, pk, fx_, left in (("PREV", page_key + "_pgprev", LP_X + 24, True), ("NEXT", page_key + "_pgnext", LP_X + LP_W - 24 - bw, False)):
+            ims = []
+            for st in ("on", "off"):
+                im = Image.new("RGB", (bw, bh), INK if st == "on" else PAPER)
+                ImageDraw.Draw(im).rectangle([0, 0, bw - 1, bh - 1], outline=INK, width=3)
+                t_w = text_width(F["bold8"], label) * S
+                px_text(im, F["bold8"], label, bw // 2 - t_w // 2, bh // 2 - F["bold8"].h * S // 2, S, PAPER if st == "on" else INK)
+                ims.append(save_png("%s_%s_%s" % (key, "prev" if left else "next", st), im))
+            bk = "%sPg%s" % (key, "Prev" if left else "Next")
+            defs[bk] = ss._local(bk, [ss._action("Mouse Down", "Q-Link")], [ss._button(ims[0], ims[1], 1, 1, bw, bh)])
+            place(bk, label, PIDX[pk], fx_, fy, bw, bh, focus="No", cond=open_c, kids=kids_, img=ims[1])
+        lk = key + "PageText"
+        defs[lk] = ss._local(lk, [], [ss._value_label(0, 0, 360, bh, 34.0, "%02x%02x%02x" % INK, "horizontallyCentred verticallyCentred", handle="Data")])
+        place(lk, "page", PIDX[page_key + "_page"], LP_X + LP_W // 2 - 180, fy, 360, bh, focus="No", cond=open_c, kids=kids_)
+    return kids_
+
+
+on_top += list_panel("BANKS", "mnmBank", "bank_pick", "bank_s%d", "bank_open", "bank", 3)
+on_top += list_panel("PRESETS", "mnmPreset", "preset_pick", "preset_s%d", "preset_open", "preset", 4)
+
 # ------------------------------------------------------------------ assemble ----------------------------------------
 if TABS:
     TAB_SETS = [   # per tab: the Q-Link pages (nested pages share the picture; each has its own 16 keys)
@@ -1161,6 +1233,35 @@ else:
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
                  ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"] + ([] if FXV else ["master_tune", "lpf_key", "hpf_key"]))]),
     ]
+
+
+def qlink_boxes(keys):
+    """MPC outlines the four controls the Q-Links drive: one rectangle per Q-Link column (slots 4c..4c+3 = a row of four cells
+    on a page); controls that are not knob cells (LEV, the machine block, the globals) leave their column's box out."""
+    def cell(key):
+        m = re.match(r"(syn|amp|filt|efx|lfo(\d))_?(\d)$", key)
+        if not m:
+            return None
+        page = {"syn": "SYN", "amp": "AMP", "filt": "FILT", "efx": "EFX"}.get(m.group(1)) or "LFO%s" % m.group(2)
+        if page not in PAGE_POS:
+            return None
+        x0, y0 = page_origin(page)
+        k = int(m.group(3))
+        return x0 + (k % 4) * CW * S, y0 + (GRID_Y + (k // 4) * CELL) * S, CW * S, CELL * S
+    rects = []
+    for c in range(4):
+        cs = [r for r in (cell(k) for k in keys[c * 4:c * 4 + 4]) if r]
+        if not cs:
+            rects.append("0 0 0 0")
+            continue
+        x0, y0 = min(r[0] for r in cs), min(r[1] for r in cs)
+        x1, y1 = max(r[0] + r[2] for r in cs), max(r[1] + r[3] for r in cs)
+        rects.append("%d %d %d %d" % (x0, y0, x1 - x0, y1 - y0))
+    while rects and rects[-1] == "0 0 0 0":
+        rects.pop()
+    return rects or ["0 0 0 0"]
+
+
 pages, qmap = [], []
 comp_bg = {"version": 1, "colour": "ff%02x%02x%02x" % PAPER, "image": ""}
 for t, (tab_title, sets) in enumerate(TAB_SETS):
@@ -1170,12 +1271,12 @@ for t, (tab_title, sets) in enumerate(TAB_SETS):
         for s_, k in enumerate(keys):
             ql["Q-Link %d" % ss.qlink_for_slot(s_)] = PIDX[k]
         comp = "MONOMODULE|%s" % title
-        pages.append({"version": 3, "tabName": title, "fnKeyIndex": t, "fnKeySubIndex": sp, "qlinkBoundsData": ["0 0 0 0"],
+        pages.append({"version": 3, "tabName": title, "fnKeyIndex": t, "fnKeySubIndex": sp, "qlinkBoundsData": qlink_boxes(keys),
                       "componentName": comp, "initialSize": "0 0 %d %d" % (SKIN_W, SKIN_H), "scale": 1.0})
         qmap.append({"Tab": t + 1, "SubTab": sp + 1, "Bank Direction": "Column", "Q-Links": ql})
         defs[comp] = {"key": comp, "value": {"version": 4, "actions": [], "backgroundData": {"version": 1, "focussed": comp_bg, "unfocussed": comp_bg},
                                              "ignoreMousePresses": False, "disableCoarseDataWheel": False, "repeats": 1,
-                                             "hideQLinkBounds": True, "componentsData": kids}}
+                                             "hideQLinkBounds": False, "componentsData": kids}}
 tui = {"pageData": {"version": 1, "componentDefinitions": {"version": 2, "importFiles": [ss.AKAI + "Generic/Generic Knob Overlay.json",
                                                                                         ss.AKAI + "Generic/Generic Menu Overlay.json"],
                                                           "localComponentDefinitions": list(defs.values())},
@@ -1213,5 +1314,7 @@ def preview(state, out, tab=0):
 for t in range(NTABS):
     preview({"machine": PREVIEW_MACHINE}, os.path.join(sys.argv[3], "preview_tab%d.png" % t), t)
 preview({"machine": PREVIEW_MACHINE, "machine__open": 1}, os.path.join(sys.argv[3], "preview_open.png"), 0)
+preview({"machine": PREVIEW_MACHINE, "bank_open": 1}, os.path.join(sys.argv[3], "preview_bank.png"), 0)
+preview({"machine": PREVIEW_MACHINE, "preset_open": 1}, os.path.join(sys.argv[3], "preview_preset.png"), 0)
 if TABS:
     preview({"machine": PREVIEW_MACHINE, "lfo23tab": 1, "lfo23dest": 9}, os.path.join(sys.argv[3], "preview_lfo3.png"), 2)

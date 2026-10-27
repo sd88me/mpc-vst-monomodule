@@ -71,10 +71,11 @@ requires it):
   upstream is a fixed-size JUCE window; MPC's screen and skin format need a purpose-built layout.
 - **A hardware-style chassis** for the default `2x2` layout: a brushed-aluminium faceplate and thin bezel around
   one LCD whose left and right edges sit a fixed margin (`lcd_margin=28` px) outside the page panels.
-- **A bank selector** alongside the PREV/NEXT preset stepper, so you can narrow browsing to one
-  `.syx` dump at a time instead of every loaded dump pooled together. Upstream has a full scrollable
-  library browser; MPC's plugin skins can't render a list whose length isn't known at build time (see
-  "Presets and banks" below), so this is the closest equivalent MPC allows.
+- **Bank and preset lists** (Gen2 build): tap the BANK or PRESET field and a list opens with the names of your own dumps
+  and sounds, 24 to a page (PREV/NEXT page for presets); the arrows still step. Upstream has a full scrollable library
+  browser; MPC's plugin skins can't change a list's length at run time, so these are fixed 24-slot lists whose
+  names are live text (see "Presets and banks" below).
+- **Native Q-Link outlines**: MPC outlines (orange box with a Q) the four knobs the Q-Links currently drive, one box per Q-Link column.
 - **Three randomise buttons** (RND SYN, RND A/F, RND LFO) — not in upstream at all.
 - **Master tune and LPF/HPF key-tracking controls** exposed on-screen — upstream's engine supports
   both, but its own One editor doesn't expose them as knobs; we did, in the spare space next to LEV.
@@ -101,9 +102,11 @@ Where sounds come from:
 The **BANK** stepper (above PRESET) narrows this to one `.syx` file at a time; its default, "ALL",
 pools everything together as before. A `*` after a preset's name means you've edited it since loading.
 
-There is **no tap-to-open scrollable list**. MPC's plugin skins require every option to be a
-pre-rendered image baked in at build time, so a list whose length changes at runtime (as you add
-dumps) can't be built as a real on-screen list — PREV/NEXT/BANK stepping is the closest MPC allows.
+Tap the **BANK** or **PRESET** field to open a list (Gen2 build): bank names (the first 24), or this machine's sounds in the
+selected bank, 24 per page with PREV/NEXT. A pick loads it and closes the list; tap the field again to close without
+picking. The current one is outlined. Both lists share the same screen area, so close one before opening the other.
+The list's names are live text, so a new dump shows up as soon as the plugin rescans; a bank list longer than 24 only
+shows the first 24 (the arrows reach the rest).
 
 ### The factory bank
 
@@ -113,9 +116,33 @@ firmware image, in exactly the byte layout Monomodule's own kit-dump decoder alr
 kit dump — about 77 named kits, covering every machine. This is Elektron's own content extracted from
 your own file: **the generated `.syx` is never committed, distributed or included with this repo.**
 
+## Gen2 (MPC Live III and kin, 64-bit): a normal download
+
+Gen2 MPCs run a 64-bit userland, and there the `dsp56300` JIT works as it is: no recompiling, nothing derived from your OS file
+inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Monomodule-One-<version>-mpc-aarch64.zip` and
+`Monomodule-FX-<version>-mpc-aarch64.zip`, from the catalog or the releases page), with nothing of Elektron's in it.
+
+1. Install the zip(s) like any plugin (the catalog's installer, or `install.sh` inside the zip, as root on the device).
+2. Put your own Monomachine OS file, named `Elektron_SFX6-60_OS1.32B.syx`, in the plugin's `monomodule/` folder in your Synths folder
+   (on a Live III that is `/nvme/Synths/sd88me - VST - Monomodule One/monomodule/`). One copy serves One and FX.
+3. Load the plugin once, then restart MPC. On that first load the plugin makes its skin from the OS file's own LCD artwork (a recipe
+   in the zip says which skin pixel follows which bit of the art, so the skin is exactly the Gen1 one), and it plays from then on.
+
+![Monomodule One on an MPC Live III](docs/img/monomodule-gen2.png)
+![The preset list: 32 sounds a page, from your dumps](docs/img/monomodule-gen2-presets.png)
+
+Tap BANK or PRESET to open the lists (24 banks and 32 sounds a page, PREV/NEXT page); MPC outlines the four knobs the Q-Links drive.
+
+The JIT is bit-exact with the interpreter on all 22 machines (`release/build_gen2.sh` checks this, on emulated arm64, before it
+packages). **Tested on an MPC Live III** (v0.11.0): installed from the zips, skin made from the OS file, lists and preset loads
+work. The plugin's own paced render test, with MPC running alongside: One uses 24-45% of its DSP thread depending on the machine,
+FX 29-43%, and neither underran on any machine. Other Gen2 models are untried. The catalog ids are `monomodule-one-gen2` and
+`monomodule-fx-gen2`. To build it yourself: `release/build_gen2.sh <your-os.syx>` (needs Docker; about 40 minutes, most of it the
+skin-recipe check).
+
 ## Requirements
 
-- A first-generation MPC OS standalone device (32-bit ARM: Force, MPC Live/Live II, One, X, Key 61).
+- A first-generation MPC OS standalone device (32-bit ARM: Force, MPC Live/Live II, One, X, Key 61), or a Gen2 one (see above).
   Tested on a Force running MPC OS 3.9.1 (see `tested.json`).
 - Root SSH access. Installing plugins this way is unofficial: back up first, use at your own risk.
 - Your own **Monomachine OS file** (tested against OS 1.32B), and optionally any Monomachine kit
@@ -123,7 +150,7 @@ your own file: **the generated `.syx` is never committed, distributed or include
 
 ## Install
 
-**There is no download.** The DSP is static-recompiled ahead of time from your own OS file (see "Why this exists"), and that
+**On Gen1 (32-bit ARM) there is no download.** (Gen2 has one: see above.) The DSP is static-recompiled ahead of time from your own OS file (see "Why this exists"), and that
 recompiled code ends up inside the plugin. So every build is personal: you build it from your own OS file, and the result is
 yours alone to install, never to redistribute.
 

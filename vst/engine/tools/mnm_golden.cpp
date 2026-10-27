@@ -46,7 +46,9 @@ int main(int argc, char** argv)
         v.warmUp(8);
         h.setLfoParam(0, 0, 0); h.setLfoParam(0, 1, 0); h.setLfoParam(0, 6, 64); h.setLfoParam(0, 7, 90);
         std::mt19937 rng(7);
-        std::uniform_real_distribution<float> noise(-0.6f, 0.6f);
+        // integer-derived noise: std::uniform_real_distribution<float> rounds through long double, which is 80-bit on x86 and
+        // 128-bit on aarch64, so its input differed between hosts and the FX hashes with it
+        const auto noise = [&rng]() { return (float(int32_t(rng() >> 8)) - 8388608.f) * (0.6f / 8388608.f); };
         std::vector<float> L(kChunk), R(kChunk), inL(kChunk), inR(kChunk), raw;
         uint64_t hsh = 0xcbf29ce484222325ull;
         h.noteOn(fx ? 60 : 45);
@@ -66,7 +68,7 @@ int main(int argc, char** argv)
             }
             if (fx) {
                 const float g = c < kChunks / 2 ? 1.f : 0.f;   // input stops halfway: tails
-                for (int i = 0; i < kChunk; ++i) { inL[i] = g * noise(rng); inR[i] = g * noise(rng); }
+                for (int i = 0; i < kChunk; ++i) { inL[i] = g * noise(); inR[i] = g * noise(); }
                 v.processFx(inL.data(), inR.data(), L.data(), R.data(), kChunk);
             } else {
                 v.process(L.data(), R.data(), kChunk);

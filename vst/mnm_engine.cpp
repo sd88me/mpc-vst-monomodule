@@ -19,6 +19,7 @@
 #include <cctype>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <algorithm>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -35,6 +36,9 @@
 #include "firmware/Firmware.h"
 #include "library/MnmDump.h"
 #include "host/Machines.h"
+
+#include "skin_art.h"
+#include "skin_recipe.h"
 
 extern "C" {
 #include "engine.h"
@@ -230,7 +234,7 @@ Catalog* buildCatalog(const std::vector<std::string>& dirs, uint64_t sig)
 }
 
 struct Inst {
-    std::string osPath;
+    std::string osPath, dataDir;
     std::atomic<int> param[kNumSlots];
     std::atomic<bool> stop{false}, ready{false}, parked{false};
     std::atomic<uint32_t> underruns{0}, blocks{0};
@@ -320,25 +324,89 @@ struct Inst {
         if (const Catalog* c = cat.load()) for (auto& b : c->banks) out.push_back(b);
         return out;
     }
-    void stepBank(int dir)
+    int bankIndex() const
     {
         const auto banks = bankList();
-        int idx = 0;
-        for (size_t i = 0; i < banks.size(); ++i) if (banks[i] == bankName) { idx = int(i); break; }
-        const int n = int(banks.size());
-        idx = ((idx + dir) % n + n) % n;
+        for (size_t i = 0; i < banks.size(); ++i) if (banks[i] == bankName) return int(i);
+        return 0;
+    }
+    void selectBank(int idx)
+    {
+        const auto banks = bankList();
+        if (idx < 0 || idx >= int(banks.size())) return;
         bankName = banks[size_t(idx)];
         presetIdx = 0;   // the current selection may not exist in the new bank: fall back to Init, as a machine change does
+        pageSeen = -1;
         markLoaded();
+    }
+    void stepBank(int dir)
+    {
+        const int n = int(bankList().size());
+        selectBank(((bankIndex() + dir) % n + n) % n);
     }
     std::string bankLabel() const { return bankName.empty() ? "ALL" : bankName; }
     void stepPreset(int dir)
     {
         const int ms = param[kSlotMachine].load();
+        const int n = 1 + int(soundsFor(int(kMachines[ms])).size());
+        selectPreset((presetIdx + dir + n) % n);
+    }
+    // the preset list popup: kPickSlots entries per page, entry 0 of page 0 is Init
+    static constexpr int kPickSlots = 32, kBankSlots = 24;   // entries per page: the preset list is 4 x 8, the bank list 3 x 8
+    int pageNum = 0, pageSeen = 0, bankPageNum = 0, bankPageSeen = 0;
+    std::mutex pickMu;
+    std::vector<std::string> pickNames;   // INIT + the machine's sounds in the selected bank, upper case; rebuilt when the key changes
+    const Catalog* pickCat = nullptr; int pickMachine = -1; std::string pickBank;
+    const std::vector<std::string>& pickList()   // pickMu held
+    {
+        const int ms = param[kSlotMachine].load();
+        const Catalog* c = cat.load();
+        if (c != pickCat || ms != pickMachine || bankName != pickBank || pickNames.empty()) {
+            pickCat = c; pickMachine = ms; pickBank = bankName;
+            pickNames.assign(1, "INIT");
+            for (int i : soundsFor(int(kMachines[ms]))) {
+                std::string n = c->sounds[size_t(i)].name;
+                for (auto& ch : n) ch = char(toupper(static_cast<unsigned char>(ch)));
+                pickNames.push_back(n);
+            }
+        }
+        return pickNames;
+    }
+    int pages() { std::lock_guard<std::mutex> g(pickMu); return (int(pickList().size()) + kPickSlots - 1) / kPickSlots; }
+    int page()   // follows the current preset until the pager is used
+    {
+        if (presetIdx != pageSeen) { pageSeen = presetIdx; pageNum = presetIdx / kPickSlots; }
+        return pageNum;
+    }
+    int bankPages() const { return (int(bankList().size()) + kBankSlots - 1) / kBankSlots; }
+    int bankPage()
+    {
+        const int bi = bankIndex();
+        if (bi != bankPageSeen) { bankPageSeen = bi; bankPageNum = bi / kBankSlots; }
+        return bankPageNum;
+    }
+    void stepBankPage(int dir) { const int p = bankPage() + dir; if (p >= 0 && p < bankPages()) bankPageNum = p; }
+    void stepPage(int dir) { const int p = page() + dir; if (p >= 0 && p < pages()) pageNum = p; }
+    std::string pickEntry(int k)
+    {
+        std::lock_guard<std::mutex> g(pickMu);
+        const auto& l = pickList();
+        const size_t i = size_t(page()) * kPickSlots + size_t(k);
+        return i < l.size() ? l[i] : std::string();
+    }
+    void pickPreset(int k)
+    {
+        std::unique_lock<std::mutex> g(pickMu);
+        const int idx = page() * kPickSlots + k;
+        const bool ok = k >= 0 && k < kPickSlots && idx < int(pickList().size());
+        g.unlock();
+        if (ok) selectPreset(idx);
+    }
+    void selectPreset(int idx)
+    {
+        const int ms = param[kSlotMachine].load();
         const auto list = soundsFor(int(kMachines[ms]));
-        const int n = 1 + int(list.size());
-        int idx = (presetIdx + dir) % n;
-        if (idx < 0) idx += n;
+        if (idx < 0 || idx > int(list.size())) return;
         if (idx == 0) { loadInit(ms); return; }
         const Catalog* c = cat.load();
         const auto& snd = c->sounds[size_t(list[size_t(idx - 1)])];
@@ -404,6 +472,39 @@ struct Inst {
     void run();
 };
 
+// The skin, made on the device (the Gen2 download carries no Elektron art): <plugin folder>/skin-recipe/art.bin (vst/skin/skin_recipe.py)
+// says which skin pixel follows which bit of the LCD artwork, and the user's OS file gives the bits (vst/skin_recipe.h). Writes the
+// images of every Monomodule plugin folder found next to this one that has not got them yet, once (a marker file in each). MPC reads
+// skins when it starts, so the new skin shows from the next start. No recipe: nothing to do (Gen1 packages carry the finished skin).
+static void makeSkins(const std::string& dataDir, const std::string& osPath)
+{
+    const auto cut = [](const std::string& p) { const size_t s = p.find_last_of('/'); return s == std::string::npos ? std::string(".") : p.substr(0, s); };
+    const std::string recipe = cut(dataDir) + "/skin-recipe/art.bin";   // <Synths>/<plugin folder>/skin-recipe (dataDir: .../monomodule)
+    struct stat st{}, os{};
+    if (stat(recipe.c_str(), &st) != 0 || stat(osPath.c_str(), &os) != 0) return;
+    const std::string synths = cut(cut(dataDir));
+    const std::string stamp = std::to_string(os.st_size) + " " + std::to_string(st.st_size) + " " + std::to_string(st.st_mtime);
+    std::vector<std::string> made;
+    try {
+        const auto bits = mnm::skinart::bits(osPath);
+        std::string err;
+        const int n = mnm::skin::fill(recipe, bits, [&](const std::string&, const std::string& folder) -> std::string {
+            const std::string dir = synths + "/" + folder;
+            if (!mnm::skin::isDir(dir)) return {};   // that plugin is not installed
+            std::vector<uint8_t> have;
+            if (mnm::skin::readFile(dir + "/" + mnm::skin::kMarker, have) && std::string(have.begin(), have.end()) == stamp) return {};
+            if (std::find(made.begin(), made.end(), dir) == made.end()) made.push_back(dir);
+            return dir;
+        }, err);
+        if (n < 0) { std::fprintf(stderr, "[monomodule] skin: %s\n", err.c_str()); return; }
+        for (const auto& dir : made)
+            if (std::FILE* f = std::fopen((dir + "/" + mnm::skin::kMarker).c_str(), "w")) { std::fputs(stamp.c_str(), f); std::fclose(f); }
+        if (n) std::fprintf(stderr, "[monomodule] skin: %d images made from your OS file (shown from MPC's next start)\n", n);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[monomodule] skin: %s\n", e.what());
+    }
+}
+
 std::unique_ptr<fw::Firmware> loadFw(const std::string& path)
 {
     return std::make_unique<fw::Firmware>(fw::loadFirmware(path));
@@ -415,8 +516,15 @@ void Inst::run()
     std::unique_ptr<fw::Firmware> firmware;
     std::unique_ptr<MonoVoice> voice;
     try {
+        makeSkins(dataDir, osPath);
         firmware = loadFw(osPath);
         voice = std::make_unique<MonoVoice>(*firmware);
+#ifndef DSP56K_RECOMP
+        // The JIT compiles a machine's code the first time it runs (5-30 ms, heard as a dropout at a machine's first note or when
+        // the machine changes). Render every machine once, silently, before "ready", then back to a fresh voice with the code kept
+        // (about 0.25 s per instance on x86; bit-exact, mnm-golden MNM_PREWARM=1). MNM_PREWARM=0 skips it.
+        if (!std::getenv("MNM_PREWARM") || std::atoi(std::getenv("MNM_PREWARM")) != 0) voice->prewarm();
+#endif
         voice->host().setMachine(kMachines[param[kSlotMachine].load()]);
 #if MNM_FX
         voice->host().setRouting(host::dspInputBits(host::FxInput::InpAB));
@@ -576,13 +684,27 @@ void Inst::run()
 
 void* eCreate(const char* dataDir)
 {
-    // the JIT path has no 32-bit ARM backend; the recompiled interpreter is the only one that works there
+#ifdef DSP56K_RECOMP
+    // Gen1: the JIT has no 32-bit ARM backend; the recompiled interpreter is the only one that works there. Gen2 (aarch64) runs the JIT.
     setenv("MNM_DSP_INTERP", "1", 0);
+#endif
     auto* in = new Inst();
     if (access("/tmp/mnm_trace.on", F_OK) == 0) in->trace = std::fopen("/tmp/mnm_trace.log", "a");
     if (const char* p = std::getenv("MNM_OS")) in->osPath = p;
     else in->osPath = std::string(dataDir && *dataDir ? dataDir : ".") + "/Elektron_SFX6-60_OS1.32B.syx";
     const std::string base = dataDir && *dataDir ? dataDir : ".";
+    in->dataDir = base;
+    // One OS file serves both plugins: when this plugin's folder has none, the other Monomodule plugin's folder may
+    if (access(in->osPath.c_str(), R_OK) != 0 && !std::getenv("MNM_OS")) {
+        const size_t sl = base.find_last_of('/'), sl2 = sl == std::string::npos ? sl : base.find_last_of('/', sl - 1);
+        if (sl2 != std::string::npos) {
+            const std::string synths = base.substr(0, sl2);
+            for (const char* other : {"sd88me - VST - Monomodule One", "sd88me - VST - Monomodule FX"}) {
+                const std::string cand = synths + "/" + other + "/" + base.substr(sl + 1) + "/Elektron_SFX6-60_OS1.32B.syx";
+                if (access(cand.c_str(), R_OK) == 0) { in->osPath = cand; break; }
+            }
+        }
+    }
     in->dumpDirs = {base + "/dumps", "/sdcard/Force Documents/Monomachine Dumps"};   // manual copy (SD card) and MPC's own Documents browser
     in->catTh = std::thread([in] {
         while (!in->stop.load(std::memory_order_acquire)) {
@@ -646,6 +768,20 @@ void eSet(void* p, const char* key, const char* val)
         if (std::atof(val) > 0.5) in->stepBank(key[5] == 'n' ? 1 : -1);
         return;
     }
+    if (!std::strcmp(key, "bank_pick")) {
+        const int k = int(std::lround(std::atof(val)));
+        if (k >= 0 && k < Inst::kBankSlots) in->selectBank(in->bankPage() * Inst::kBankSlots + k);
+        return;
+    }
+    if (!std::strcmp(key, "bank_pgprev") || !std::strcmp(key, "bank_pgnext")) {
+        if (std::atof(val) > 0.5) in->stepBankPage(key[7] == 'n' ? 1 : -1);
+        return;
+    }
+    if (!std::strcmp(key, "preset_pick")) { in->pickPreset(int(std::lround(std::atof(val)))); return; }
+    if (!std::strcmp(key, "preset_pgprev") || !std::strcmp(key, "preset_pgnext")) {
+        if (std::atof(val) > 0.5) in->stepPage(key[9] == 'n' ? 1 : -1);
+        return;
+    }
     if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && !std::strcmp(key + 4, "_pagesel")) {
         const int idx = std::clamp(int(std::lround(std::atof(val))), 0, 8);
         in->param[kSlotLfo + (key[3] - '1') * 8].store(listRawMid9(idx));
@@ -665,6 +801,7 @@ void eSet(void* p, const char* key, const char* val)
         for (int i = 0; i < 32; ++i) in->param[kSlotPages + i].store(d[i]);
         in->param[kSlotMachine].store(m);
         in->presetIdx = 0;   // a new machine starts from its Init
+        in->pageSeen = -1;
         in->markLoaded();
         return;
     }
@@ -678,6 +815,25 @@ int eGet(void* p, const char* key, char* buf, int len)
     if (!std::strcmp(key, "preset_name")) return std::snprintf(buf, size_t(len), "%s", in->presetName().c_str());
     if (!std::strcmp(key, "bank_name")) return std::snprintf(buf, size_t(len), "%s", in->bankLabel().c_str());
     if (!std::strcmp(key, "bank_prev") || !std::strcmp(key, "bank_next")) return std::snprintf(buf, size_t(len), "0");
+    if (!std::strcmp(key, "bank_pick")) {
+        const int k = in->bankIndex() - in->bankPage() * Inst::kBankSlots;
+        return std::snprintf(buf, size_t(len), "%d", k >= 0 && k < Inst::kBankSlots ? k : Inst::kBankSlots);
+    }
+    if (!std::strcmp(key, "bank_page")) return std::snprintf(buf, size_t(len), "PAGE %d/%d", in->bankPage() + 1, std::max(in->bankPages(), 1));
+    if (!std::strcmp(key, "bank_pgprev") || !std::strcmp(key, "bank_pgnext")) return std::snprintf(buf, size_t(len), "0");
+    if (!std::strncmp(key, "bank_s", 6) && std::isdigit(static_cast<unsigned char>(key[6]))) {
+        const auto banks = in->bankList();
+        const size_t k = size_t(in->bankPage() * Inst::kBankSlots + std::atoi(key + 6));
+        return std::snprintf(buf, size_t(len), "%s", k >= banks.size() ? "" : k == 0 ? "ALL" : banks[k].c_str());
+    }
+    if (!std::strcmp(key, "preset_pick")) {
+        const int k = in->presetIdx - in->page() * Inst::kPickSlots;
+        return std::snprintf(buf, size_t(len), "%d", k >= 0 && k < Inst::kPickSlots ? k : Inst::kPickSlots);
+    }
+    if (!std::strncmp(key, "preset_s", 8) && std::isdigit(static_cast<unsigned char>(key[8])))
+        return std::snprintf(buf, size_t(len), "%s", in->pickEntry(std::atoi(key + 8)).c_str());
+    if (!std::strcmp(key, "preset_page")) return std::snprintf(buf, size_t(len), "PAGE %d/%d", in->page() + 1, std::max(in->pages(), 1));
+    if (!std::strcmp(key, "preset_pgprev") || !std::strcmp(key, "preset_pgnext")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "preset_prev") || !std::strcmp(key, "preset_next")) return std::snprintf(buf, size_t(len), "0");
     if (!std::strcmp(key, "lfo23dest")) {   // DEST's view of the LFO2|LFO3 page: tab * 9 + that LFO's PAGE list index
         const int tab = std::clamp(in->param[kSlotTab].load(), 0, 1);
