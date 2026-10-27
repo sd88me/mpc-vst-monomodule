@@ -128,9 +128,17 @@ inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Mo
 3. Load the plugin once, then restart MPC. On that first load the plugin makes its skin from the OS file's own LCD artwork (a recipe
    in the zip says which skin pixel follows which bit of the art, so the skin is exactly the Gen1 one), and it plays from then on.
 
+![Monomodule One on an MPC Live III](docs/img/monomodule-gen2.png)
+![The preset list: 32 sounds a page, from your dumps](docs/img/monomodule-gen2-presets.png)
+
+Tap BANK or PRESET to open the lists (24 banks and 32 sounds a page, PREV/NEXT page); MPC outlines the four knobs the Q-Links drive.
+
 The JIT is bit-exact with the interpreter on all 22 machines (`release/build_gen2.sh` checks this, on emulated arm64, before it
-packages). Not yet run on a real Gen2 MPC: please report what you find. To build it yourself:
-`release/build_gen2.sh <your-os.syx>` (needs Docker; about 40 minutes, most of it the skin-recipe check).
+packages). **Tested on an MPC Live III** (v0.11.0): installed from the zips, skin made from the OS file, lists and preset loads
+work. The plugin's own paced render test, with MPC running alongside: One uses 24-45% of its DSP thread depending on the machine,
+FX 29-43%, and neither underran on any machine. Other Gen2 models are untried. The catalog ids are `monomodule-one-gen2` and
+`monomodule-fx-gen2`. To build it yourself: `release/build_gen2.sh <your-os.syx>` (needs Docker; about 40 minutes, most of it the
+skin-recipe check).
 
 ## Requirements
 
