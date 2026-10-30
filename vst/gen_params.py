@@ -77,6 +77,9 @@ for k in range(PRESET_SLOTS):
 params.append({"key": "preset_pgprev", "name": "Preset Page Prev", "min": 0, "max": 1, "momentary": True})
 params.append({"key": "preset_pgnext", "name": "Preset Page Next", "min": 0, "max": 1, "momentary": True})
 params.append({"key": "preset_page", "name": "Preset Page", "min": 0, "max": 0, "display": "string"})
+# POLY (instruments only; appended last): 1 = the classic monophonic voice, 2..6 = notes spread over that many engines (Gen2 only: Gen1 stays at 1)
+if not FX:
+  params.append({"key": "voices", "name": "Voices", "min": 1, "max": 6, "default": 1, "display": "int"})
 out = os.path.join("fx", "params.json") if FX else "params.json"
 os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
 json.dump({"name": "Monomodule FX" if FX else "Monomodule One", "params": params,
