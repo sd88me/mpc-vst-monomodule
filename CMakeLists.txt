@@ -72,6 +72,9 @@ endif()
 add_executable(mnm-golden vst/engine/tools/mnm_golden.cpp)
 target_link_libraries(mnm-golden PRIVATE mnmcore)
 
+add_executable(mnm-six-bench vst/engine/tools/mnm_six_bench.cpp)
+target_link_libraries(mnm-six-bench PRIVATE mnmcore)
+
 add_executable(mnm-recomp-discover "${MNM_DSP56300_DIR}/tools/arm32jit_prototype/recomp/mnm_recomp_discover.cpp")
 target_link_libraries(mnm-recomp-discover PRIVATE mnmcore ${CMAKE_DL_LIBS})
 
