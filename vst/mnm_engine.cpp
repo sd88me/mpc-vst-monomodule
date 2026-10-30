@@ -658,9 +658,11 @@ void Inst::runVoices(MonoVoice& v0, const fw::Firmware& firmware, int prio)
     double sumUs = 0, sumV0 = 0, worstUs = 0; long nBlk = 0, nLate = 0, nSlow = 0;   // MNM_DEBUG
     const bool dbg = std::getenv("MNM_DEBUG") != nullptr;
     int afterNote = 0;
+    auto lastIter = std::chrono::steady_clock::now();
     float gain = 1.f;
     while (!stop.load(std::memory_order_acquire)) {
         const uint32_t w = rWrite.load(std::memory_order_relaxed);
+        if (dbg) { const auto n0 = std::chrono::steady_clock::now(); const double g = std::chrono::duration<double, std::milli>(n0 - lastIter).count(); if (g > 20) std::fprintf(stderr, "[monomodule] loop gap %.0f ms, ring ahead %d, cpu %d\n", g, int32_t(w - rRead.load()), sched_getcpu()); lastIter = n0; }
         if (int32_t(w - rRead.load(std::memory_order_acquire)) >= kAhead) {
             struct timespec ts{0, 400000};
             nanosleep(&ts, nullptr);
@@ -741,6 +743,7 @@ void Inst::runVoices(MonoVoice& v0, const fw::Firmware& firmware, int prio)
             if (us > 2000 && nSlow++ < 40) { std::fprintf(stderr, "[monomodule] slow block %ld: %.0f us (voice 0 %.0f) late:", nBlk, us, std::chrono::duration<double, std::micro>(tv0 - tb).count()); for (int k = 1; k < nv; ++k) std::fprintf(stderr, " [v%d late=%d last=%dus cpu=%d]", k, got[size_t(k)] ? 0 : 1, slots[size_t(k)].lastUs.load(), slots[size_t(k)].cpu.load()); std::fprintf(stderr, " main cpu %d\n", sched_getcpu()); }
             if (nBlk % 300 == 0) std::fprintf(stderr, "[monomodule] poly: %d voices, block mean %.0f us (voice 0 %.0f), worst %.0f, late %ld / %ld\n", nv, sumUs / nBlk, sumV0 / nBlk, worstUs, nLate, nBlk);
         }
+        if (dbg) { const double t = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tb).count(); if (t > 20) std::fprintf(stderr, "[monomodule] block took %.0f ms (voice 0 %.0f ms)\n", t, std::chrono::duration<double, std::milli>(tv0 - tb).count()); }
         int16_t* out = ring[w % kRing];
         for (int i = 0; i < kFrames; ++i) {
             float l = 0.f, rr = 0.f;

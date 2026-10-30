@@ -7,6 +7,8 @@
 #include <thread>
 #include <dirent.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <sched.h>
 extern "C" {
 #include "engine.h"
 }
@@ -33,6 +35,7 @@ static double dspCpuSeconds()
 }
 int main(int argc, char** argv)
 {
+    if (getenv("SMOKE_RR")) { sched_param sp{}; sp.sched_priority = atoi(getenv("SMOKE_RR")); if (pthread_setschedparam(pthread_self(), SCHED_RR, &sp)) puts("could not set SCHED_RR"); }   // the host's audio thread (MPC: RR 20)
     const mpc_engine_t* e = mpc_engine();
     const auto t0 = Clock::now();
     void* in = e->create(argc > 1 ? argv[1] : ".");
@@ -65,6 +68,7 @@ int main(int argc, char** argv)
     for (int b = 0; b < blocks; ++b) {
         next += std::chrono::nanoseconds(int64_t(128.0 / 44100.0 * 1e9));
         std::this_thread::sleep_until(next);
+        { const double late = std::chrono::duration<double, std::milli>(Clock::now() - next).count(); if (late > 20) printf("consumer woke %.0f ms late at block %d\n", late, b); }
         if (fx) {
             static int16_t src[128 * 2];
             for (int i = 0; i < 256; ++i) src[i] = b < blocks * 3 / 4 ? int16_t((rand() % 16000) - 8000) : 0;
