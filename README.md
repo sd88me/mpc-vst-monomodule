@@ -9,7 +9,7 @@
 
 [Monomodule](https://github.com/shnolk/monomodule) — a chip-accurate emulation of the Elektron
 Monomachine's synth engine — as native VST2 plugins for Akai MPC OS standalone devices (MPC
-Live/One/X/Key, Force). **Monomodule** (the instrument, formerly Monomodule One) has 15 synth machines; **Monomodule FX**
+Live/One/X/Key, Force). **Monomodule One** is the instrument (15 synth machines); **Monomodule FX**
 is the same engine's 7 effect machines as an audio effect. Both load in MPC's built-in plugin host
 with their own touchscreen skins and Q-Link support.
 
@@ -129,7 +129,7 @@ inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Mo
 3. Load the plugin once, then restart MPC. On that first load the plugin makes its skin from the OS file's own LCD artwork (a recipe
    in the zip says which skin pixel follows which bit of the art, so the skin is exactly the Gen1 one), and it plays from then on.
 
-![Monomodule on an MPC Live III](docs/img/monomodule-gen2.png)
+![Monomodule One on an MPC Live III](docs/img/monomodule-gen2.png)
 ![The preset list: 32 sounds a page, from your dumps](docs/img/monomodule-gen2-presets.png)
 ![Monomodule FX on an MPC Live III](docs/img/monomodule-fx-gen2.png)
 
@@ -208,7 +208,7 @@ with more detail, and the general [build-it-yourself process](https://sd88me.git
 
 ### Step 4: Use it
 
-On the device, add **Monomodule** (Instrument plugins; it was called Monomodule One before 1.0.0, and its folder keeps that name) or **Monomodule FX** (Insert effects) to a track; both are listed
+On the device, add **Monomodule One** (Instrument plugins) or **Monomodule FX** (Insert effects) to a track; both are listed
 under the manufacturer **sd88me**. Save and reload a project once to confirm your sound comes back.
 
 ### Alternative: build now, install later
