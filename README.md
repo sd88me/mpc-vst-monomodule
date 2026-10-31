@@ -13,8 +13,9 @@ Live/One/X/Key, Force). **Monomodule** (the instrument, formerly Monomodule One)
 is the same engine's 7 effect machines as an audio effect. Both load in MPC's built-in plugin host
 with their own touchscreen skins and Q-Link support.
 
-Current release: **v0.10.2** — no downloadable build (see "Install" below for why); build it yourself
-from your own OS file with `release/release.sh` (one command; `release/build_from_os.sh` is its build step).
+Current release: **v1.0.0** for Gen2 (MPC Live III and kin), a normal download with nothing of Elektron's in it (see
+"Gen2" below), now with a poly mode. The Force (Gen1, v0.10.2) has no downloadable build (see "Install" below for why); build it
+yourself from your own OS file with `release/release.sh` (one command; `release/build_from_os.sh` is its build step).
 
 An MPC port by sd88me of shnolk's Monomodule engine (all credit for the emulation to shnolk; see Credits). Listed in MPC
 under the manufacturer **sd88me**, since shnolk neither makes nor supports this port: report problems here, not to shnolk.
@@ -128,7 +129,7 @@ inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Mo
 3. Load the plugin once, then restart MPC. On that first load the plugin makes its skin from the OS file's own LCD artwork (a recipe
    in the zip says which skin pixel follows which bit of the art, so the skin is exactly the Gen1 one), and it plays from then on.
 
-![Monomodule One on an MPC Live III](docs/img/monomodule-gen2.png)
+![Monomodule on an MPC Live III](docs/img/monomodule-gen2.png)
 ![The preset list: 32 sounds a page, from your dumps](docs/img/monomodule-gen2-presets.png)
 ![Monomodule FX on an MPC Live III](docs/img/monomodule-fx-gen2.png)
 
@@ -142,8 +143,8 @@ on a Live III (six DDRW voices: about 1.8 cores); the Force stays at 1 voice. Ou
 scaled by the voice count^-1/4.
 
 The JIT is bit-exact with the interpreter on all 22 machines (`release/build_gen2.sh` checks this, on emulated arm64, before it
-packages). **Tested on an MPC Live III** (v0.11.0): installed from the zips, skin made from the OS file, lists and preset loads
-work. The plugin's own paced render test, with MPC running alongside: One uses 24-45% of its DSP thread depending on the machine,
+packages). **Tested on an MPC Live III** (v1.0.0): installed from the zips, skin made from the OS file, lists, preset loads and POLY
+playing from the pads work. The plugin's own paced render test, with MPC running alongside: One uses 24-45% of its DSP thread depending on the machine,
 FX 29-43%, and neither underran on any machine. Other Gen2 models are untried. The catalog ids are `monomodule-one-gen2` and
 `monomodule-fx-gen2`. To build it yourself: `release/build_gen2.sh <your-os.syx>` (needs Docker; about 40 minutes, most of it the
 skin-recipe check).
@@ -207,7 +208,7 @@ with more detail, and the general [build-it-yourself process](https://sd88me.git
 
 ### Step 4: Use it
 
-On the device, add **Monomodule One** (Instrument plugins) or **Monomodule FX** (Insert effects) to a track; both are listed
+On the device, add **Monomodule** (Instrument plugins; it was called Monomodule One before 1.0.0, and its folder keeps that name) or **Monomodule FX** (Insert effects) to a track; both are listed
 under the manufacturer **sd88me**. Save and reload a project once to confirm your sound comes back.
 
 ### Alternative: build now, install later
