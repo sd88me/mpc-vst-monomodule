@@ -1,0 +1,20 @@
+[
+  {
+    "path": "monomodule",
+    "label": "Monomachine OS",
+    "description": "Monomodule runs your own Monomachine OS 1.32B file (a free download from Elektron). One copy here serves Monomodule One and Monomodule FX.",
+    "hint": "After adding it, load Monomodule One once and restart MPC: it makes its skin from that file.",
+    "rules": [
+      {"label": "Monomachine OS 1.32B", "ext": [".syx"], "size": 903066, "header_hex": "f000203c03007e", "save_as": "Elektron_SFX6-60_OS1.32B.syx"}
+    ]
+  },
+  {
+    "path": "monomodule/dumps",
+    "label": "Your sounds (optional)",
+    "description": "Monomachine kit dumps (.syx). Their synth sounds appear as presets.",
+    "rules": [
+      {"label": "Kit dump", "ext": [".syx"], "size_min": 16, "size_max": 33554432, "header_hex": "f000203c0300", "unverified": true,
+       "note": "An Elektron SysEx file. Its sounds appear if it holds Monomachine kits."}
+    ]
+  }
+]

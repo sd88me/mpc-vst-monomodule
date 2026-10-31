@@ -126,6 +126,7 @@ inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Mo
 1. Install the zip(s) like any plugin (the catalog's installer, or `install.sh` inside the zip, as root on the device).
 2. Put your own Monomachine OS file, named `Elektron_SFX6-60_OS1.32B.syx`, in the plugin's `monomodule/` folder in your Synths folder
    (on a Live III that is `/nvme/Synths/sd88me - VST - Monomodule One/monomodule/`). One copy serves One and FX.
+   The installer app's **Your ROMs and files** step can do this for you: it checks each file before copying it into the right folder and saves it under that name, whatever it is called on your computer (rules: `release/userfiles.json`).
 3. Load the plugin once, then restart MPC. On that first load the plugin makes its skin from the OS file's own LCD artwork (a recipe
    in the zip says which skin pixel follows which bit of the art, so the skin is exactly the Gen1 one), and it plays from then on.
 
