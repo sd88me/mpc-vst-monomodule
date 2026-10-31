@@ -9,7 +9,7 @@
 
 [Monomodule](https://github.com/shnolk/monomodule) — a chip-accurate emulation of the Elektron
 Monomachine's synth engine — as native VST2 plugins for Akai MPC OS standalone devices (MPC
-Live/One/X/Key, Force). **Monomodule One** is the instrument (15 synth machines); **Monomodule FX**
+Live/One/X/Key, Force). **Monomodule** (the instrument, formerly Monomodule One) has 15 synth machines; **Monomodule FX**
 is the same engine's 7 effect machines as an audio effect. Both load in MPC's built-in plugin host
 with their own touchscreen skins and Q-Link support.
 
@@ -133,6 +133,13 @@ inside the plugin. So on Gen2 Monomodule is an **ordinary plugin download** (`Mo
 ![Monomodule FX on an MPC Live III](docs/img/monomodule-fx-gen2.png)
 
 Tap BANK or PRESET to open the lists (24 banks and 32 sounds a page, PREV/NEXT page); MPC outlines the four knobs the Q-Links drive.
+
+**Poly mode (Gen2 only).** The VOICES knob on the GLOBAL page (LFO tab, second page; also a Q-Link) runs 1 to 6 copies of the
+synth engine. All voices play the instrument's current sound; VOICES only decides how incoming notes are spread over them (the same
+note retriggers its voice, then the oldest free voice, otherwise the oldest is stolen). At 1 it behaves exactly as before. The extra
+voices are built in the background a few seconds after you raise VOICES. Each voice costs about one more DSP-thread's worth of CPU
+on a Live III (six DDRW voices: about 1.8 cores); the Force stays at 1 voice. Output level is 6 dB hotter than 0.11 and the mix is
+scaled by the voice count^-1/4.
 
 The JIT is bit-exact with the interpreter on all 22 machines (`release/build_gen2.sh` checks this, on emulated arm64, before it
 packages). **Tested on an MPC Live III** (v0.11.0): installed from the zips, skin made from the OS file, lists and preset loads

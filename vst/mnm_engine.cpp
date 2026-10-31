@@ -72,7 +72,12 @@ constexpr host::Machine kMachines[kNumMachines] = {
 #endif
 
 // parameter slots: 0 machine, 1 level, 2.. = 4 pages x 8, then 3 LFOs x 8
-constexpr int kSlotMachine = 0, kSlotLevel = 1, kSlotPages = 2, kSlotLfo = 34, kSlotTab = 58, kSlotTune = 59, kSlotLpk = 60, kSlotHpk = 61, kNumSlots = 62;
+constexpr int kSlotMachine = 0, kSlotLevel = 1, kSlotPages = 2, kSlotLfo = 34, kSlotTab = 58, kSlotTune = 59, kSlotLpk = 60, kSlotHpk = 61, kSlotVoices = 62, kNumSlots = 63;
+#ifdef DSP56K_RECOMP
+constexpr int kMaxVoices = 1;   // Gen1: one engine already needs a core
+#else
+constexpr int kMaxVoices = 6;   // Gen2: POLY, up to six engines (bench: about 0.3 core each)
+#endif
 // lfoN_pagesel (N = 1..3) is the list index of that LFO's PAGE knob (raw 0..127 in 9 unequal buckets), so the skin
 // can show DEST's names for the page; setting it moves PAGE to that list entry's middle.
 constexpr int listIndex9(int raw) { return ((2 * raw + 1) * 9) >> 8; }
@@ -91,6 +96,7 @@ int slotOf(const char* key)
     (void)0;
     if (!std::strcmp(key, "lpf_key")) return kSlotLpk;        // LPF / HPF track the key (KIT > ASSIGN > KEY)
     if (!std::strcmp(key, "hpf_key")) return kSlotHpk;
+    if (!std::strcmp(key, "voices")) return kSlotVoices;      // POLY: 1 = the classic monophonic voice, 2..6 = notes spread over that many engines
     if (!std::strcmp(key, "lfo23tab")) return kSlotTab;   // the LFO2 | LFO3 tab of the skin: skin state only
     if (!std::strncmp(key, "lfo", 3) && key[3] >= '1' && key[3] <= '3' && key[4] == '_' && key[5] >= '0' && key[5] <= '7' && !key[6])
         return kSlotLfo + (key[3] - '1') * 8 + (key[5] - '0');
@@ -236,7 +242,7 @@ Catalog* buildCatalog(const std::vector<std::string>& dirs, uint64_t sig)
 struct Inst {
     std::string osPath, dataDir;
     std::atomic<int> param[kNumSlots];
-    std::atomic<bool> stop{false}, ready{false}, parked{false};
+    std::atomic<bool> stop{false}, ready{false}, parked{false}, maxVoicesFailed{false};
     std::atomic<uint32_t> underruns{0}, blocks{0};
     // note queue (host thread -> DSP thread)
     NoteEv notes[256];
@@ -263,6 +269,7 @@ struct Inst {
         param[kSlotTune].store(440);
         param[kSlotLpk].store(1);   // the hardware's kit default: key tracking on
         param[kSlotHpk].store(1);
+        param[kSlotVoices].store(1);
     }
     ~Inst() { delete cat.load(); }
     // Init of a machine: its page defaults, default LFOs and level 100.
@@ -443,6 +450,10 @@ struct Inst {
         if (std::strncmp(str, "v1|", 3)) return;
         const char* c = str + 3;
         int vals[kNumSlots], sn[kNumSlots] = {};
+        int nSlots = 1;   // an older state has one slot fewer (no voices); count the commas of the first field
+        for (const char* q = c; *q && *q != '|'; ++q) if (*q == ',') ++nSlots;
+        if (nSlots < kSlotVoices || nSlots > kNumSlots) return;
+        for (int i = nSlots; i < kNumSlots; ++i) vals[i] = param[i].load();
         auto parse = [&c](int* dst, int n, int first) {
             for (int i = first; i < first + n; ++i) {
                 char* e; dst[i] = int(std::strtol(c, &e, 10));
@@ -451,13 +462,13 @@ struct Inst {
             }
             return true;
         };
-        if (!parse(vals, kNumSlots, 0) || *c++ != '|' || !parse(sn, kSlotTab - 1, 1) || *c++ != '|') return;
+        if (!parse(vals, nSlots, 0) || *c++ != '|' || !parse(sn, kSlotTab - 1, 1) || *c++ != '|') return;
         char* e; const int idx = int(std::strtol(c, &e, 10));
         if (e == c || *e != '|') return;
         bankName = e + 1;
         vals[kSlotMachine] = std::clamp(vals[kSlotMachine], 0, kNumMachines - 1);
         vals[kSlotTune] = std::clamp(vals[kSlotTune], 400, 440);
-        for (int i = 1; i < kNumSlots; ++i) if (i != kSlotTune) vals[i] = std::clamp(vals[i], 0, (i == kSlotLpk || i == kSlotHpk) ? 1 : 127);
+        for (int i = 1; i < kNumSlots; ++i) if (i != kSlotTune) vals[i] = i == kSlotVoices ? std::clamp(vals[i], 1, kMaxVoices) : std::clamp(vals[i], 0, (i == kSlotLpk || i == kSlotHpk) ? 1 : 127);
         for (int i = 0; i < kNumSlots; ++i) param[i].store(vals[i]);
         for (int i = 1; i < kSlotTab; ++i) snap[i] = sn[i];
         presetIdx = std::max(idx, 0);
@@ -470,6 +481,7 @@ struct Inst {
         nWrite.store(w + 1, std::memory_order_release);
     }
     void run();
+    void runVoices(MonoVoice& v0, const fw::Firmware& firmware, int prio);
 };
 
 // The skin, made on the device (the Gen2 download carries no Elektron art): <plugin folder>/skin-recipe/art.bin (vst/skin/skin_recipe.py)
@@ -508,6 +520,249 @@ static void makeSkins(const std::string& dataDir, const std::string& osPath)
 std::unique_ptr<fw::Firmware> loadFw(const std::string& path)
 {
     return std::make_unique<fw::Firmware>(fw::loadFirmware(path));
+}
+
+// ---- the voice pool (instruments only): voice 0 is the classic voice and renders on the DSP thread; with VOICES > 1, up to five more
+// MonoVoice engines are built in the background, each rendering on a thread of its own, and notes are spread over them.
+namespace {
+struct VSlot {
+    MonoVoice* v = nullptr;
+    int applied[kNumSlots];
+    int machineSlot = -1;
+    bool muted = false, parked = false;
+    uint32_t silent = 0;
+    int held[16], nHeld = 0;
+    NoteEv pend[32], ops[32];       // pend: queued by the DSP thread; ops: what the render of the next block works through
+    int nPend = 0, nOps = 0;
+    float L[kFrames], R[kFrames];
+    std::atomic<uint32_t> go{0}, done{0};
+    std::atomic<int> lastUs{0}, cpu{-1};   // MNM_DEBUG
+    std::unique_ptr<MonoVoice> own;
+    std::thread th;
+    int note = -1;                  // the allocator's: the note this voice plays, -1 = free
+    uint32_t age = 0;
+    VSlot() { for (auto& a : applied) a = -1; }
+};
+// The DSP thread is pinned to one core and a thread it creates inherits that: the voices and their builder run on any core but 0 (MPC's UI core).
+void freeAffinity(int exceptCore)
+{
+    cpu_set_t cs; CPU_ZERO(&cs);
+    const int ncpu = int(sysconf(_SC_NPROCESSORS_ONLN));
+    for (int c = ncpu > 1 ? 1 : 0; c < ncpu; ++c) if (c != exceptCore || ncpu <= 2) CPU_SET(c, &cs);
+    sched_setaffinity(0, sizeof cs, &cs);
+}
+constexpr uint32_t kParkAfterBlocks = 44100 * 2 / kFrames;   // 2 s of exact silence with no note held
+
+// One voice's block: its parameters, its notes, then the DSP (or, parked, only the host model).
+void renderSlot(Inst& in, VSlot& s)
+{
+    auto& h = s.v->host();
+    const int ms = std::clamp(in.param[kSlotMachine].load(std::memory_order_relaxed), 0, kNumMachines - 1);
+    if (ms != s.machineSlot) {
+        s.machineSlot = ms;
+        h.setMachine(kMachines[ms]);
+        if (s.nHeld == 0) { h.noteOff(); s.muted = true; }   // the assign's init must not sound
+        for (int i = 0; i < 32; ++i) s.applied[kSlotPages + i] = h.param(host::Page(i / 8), i % 8);
+    }
+    for (int i = 0; i < 32; ++i) {
+        const int v = std::clamp(in.param[kSlotPages + i].load(std::memory_order_relaxed), 0, 127);
+        if (v != s.applied[kSlotPages + i]) { s.applied[kSlotPages + i] = v; h.setParam(host::Page(i / 8), i % 8, v); }
+    }
+    for (int i = 0; i < 24; ++i) {
+        const int v = std::clamp(in.param[kSlotLfo + i].load(std::memory_order_relaxed), 0, 127);
+        if (v != s.applied[kSlotLfo + i]) { s.applied[kSlotLfo + i] = v; h.setLfoParam(i / 8, i % 8, v); }
+    }
+    {
+        const int tune = std::clamp(in.param[kSlotTune].load(std::memory_order_relaxed), 400, 440);
+        const int lpk = in.param[kSlotLpk].load(std::memory_order_relaxed) ? 1 : 0, hpk = in.param[kSlotHpk].load(std::memory_order_relaxed) ? 1 : 0;
+        if (tune != s.applied[kSlotTune]) { s.applied[kSlotTune] = tune; h.setMasterTuneHz(double(tune)); }
+        if (lpk != s.applied[kSlotLpk] || hpk != s.applied[kSlotHpk]) { s.applied[kSlotLpk] = lpk; s.applied[kSlotHpk] = hpk; h.setKeyTracking(lpk != 0, hpk != 0); }
+    }
+    const int lv = std::clamp(in.param[kSlotLevel].load(std::memory_order_relaxed), 0, 127);
+    if (lv != s.applied[kSlotLevel]) { s.applied[kSlotLevel] = lv; h.setLevel(lv); }
+
+    for (int k = 0; k < s.nOps; ++k) {
+        const NoteEv e = s.ops[k];
+        if (e.type == 1) {
+            s.muted = false; s.parked = false; s.silent = 0;
+            int n = 0;
+            for (int i = 0; i < s.nHeld; ++i) if (s.held[i] != e.note) s.held[n++] = s.held[i];
+            s.nHeld = n;
+            if (s.nHeld < 16) s.held[s.nHeld++] = e.note;
+            h.noteOn(e.note);
+        } else if (e.type == 2) {
+            const bool cur = s.nHeld > 0 && s.held[s.nHeld - 1] == e.note;
+            int n = 0;
+            for (int i = 0; i < s.nHeld; ++i) if (s.held[i] != e.note) s.held[n++] = s.held[i];
+            s.nHeld = n;
+            if (s.nHeld == 0) h.noteOff();
+            else if (cur) h.noteOn(s.held[s.nHeld - 1]);
+        } else { s.nHeld = 0; h.noteOff(); }
+    }
+    s.nOps = 0;
+
+    if (s.parked) {   // idle: advance the host model only (the DSP's free-running state stops where it was)
+        s.v->skip(kFrames);
+        std::memset(s.L, 0, sizeof s.L); std::memset(s.R, 0, sizeof s.R);
+        return;
+    }
+    s.v->process(s.L, s.R, kFrames);
+    bool silent = true;
+    for (int i = 0; i < kFrames; ++i) {
+        if (s.muted) { s.L[i] = 0.f; s.R[i] = 0.f; }
+        if (std::lrint(std::clamp(s.L[i], -1.f, 1.f) * 32767.f) || std::lrint(std::clamp(s.R[i], -1.f, 1.f) * 32767.f)) silent = false;
+    }
+    if (silent && s.nHeld == 0) { if (++s.silent >= kParkAfterBlocks) s.parked = true; } else s.silent = 0;
+}
+} // namespace
+
+void Inst::runVoices(MonoVoice& v0, const fw::Firmware& firmware, int prio)
+{
+    const int maxV = std::clamp(std::getenv("MNM_MAXVOICES") ? std::atoi(std::getenv("MNM_MAXVOICES")) : kMaxVoices, 1, kMaxVoices);
+    auto slots = std::make_unique<VSlot[]>(size_t(kMaxVoices));
+    slots[0].v = &v0;
+    std::atomic<int> built{1};
+    std::thread builder;
+    bool building = false;
+    auto buildNext = [&] {
+        const int k = built.load();
+        try {
+            auto v = std::make_unique<MonoVoice>(firmware);
+#ifndef DSP56K_RECOMP
+            if (!std::getenv("MNM_PREWARM") || std::atoi(std::getenv("MNM_PREWARM")) != 0) v->prewarm();
+#endif
+            v->host().setMachine(kMachines[param[kSlotMachine].load()]);
+            v->warmUp(8);
+            VSlot& s = slots[size_t(k)];
+            s.own = std::move(v);
+            s.v = s.own.get();
+            s.th = std::thread([this, &s, prio] {
+                pthread_setname_np(pthread_self(), "mnm-voice");
+                freeAffinity(core);
+                if (prio > 0) { sched_param sp{}; sp.sched_priority = prio > 1 ? prio - 1 : prio; pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp); }   // just below the DSP thread, which must never wait for a voice
+                while (!stop.load(std::memory_order_acquire)) {
+                    const uint32_t g = s.go.load(std::memory_order_acquire);
+                    if (g == s.done.load(std::memory_order_relaxed)) { struct timespec ts{0, 20000}; nanosleep(&ts, nullptr); continue; }
+                    const auto w0 = std::chrono::steady_clock::now();
+                    renderSlot(*this, s);
+                    s.lastUs.store(int(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - w0).count())); s.cpu.store(sched_getcpu());
+                    s.done.store(g, std::memory_order_release);
+                }
+            });
+            built.store(k + 1, std::memory_order_release);
+        } catch (const std::exception& ex) { std::fprintf(stderr, "[monomodule] voice %d failed: %s\n", k + 1, ex.what()); maxVoicesFailed.store(true); }
+    };
+
+    int lastNv = 1;
+    uint32_t clock = 0;
+    double sumUs = 0, sumV0 = 0, worstUs = 0; long nBlk = 0, nLate = 0, nSlow = 0;   // MNM_DEBUG
+    const bool dbg = std::getenv("MNM_DEBUG") != nullptr;
+    int afterNote = 0;
+    auto lastIter = std::chrono::steady_clock::now();
+    // +6 dB output trim (the engine's level sits well below other MPC plugins); peaks above 0.75 are soft-limited, not hard-clipped
+    constexpr float kTrim = 2.f;
+    float gain = kTrim;
+    auto soft = [](float x) { const float a = std::fabs(x); return a <= 0.75f ? x : std::copysign(0.75f + 0.25f * std::tanh((a - 0.75f) * 4.f), x); };
+    while (!stop.load(std::memory_order_acquire)) {
+        const uint32_t w = rWrite.load(std::memory_order_relaxed);
+        if (dbg) { const auto n0 = std::chrono::steady_clock::now(); const double g = std::chrono::duration<double, std::milli>(n0 - lastIter).count(); if (g > 20) std::fprintf(stderr, "[monomodule] loop gap %.0f ms, ring ahead %d, cpu %d\n", g, int32_t(w - rRead.load()), sched_getcpu()); lastIter = n0; }
+        if (int32_t(w - rRead.load(std::memory_order_acquire)) >= kAhead) {
+            struct timespec ts{0, 400000};
+            nanosleep(&ts, nullptr);
+            continue;
+        }
+        // VOICES: build the extra engines in the background; the voices in play are as many as exist
+        const int want = std::min(param[kSlotVoices].load(std::memory_order_relaxed), maxV);
+        if (want > built.load(std::memory_order_acquire) && !maxVoicesFailed.load()) {
+            if (!building) { building = true; builder = std::thread([&] { freeAffinity(core); while (built.load() < want && !stop.load() && !maxVoicesFailed.load()) buildNext(); }); }
+        } else if (building && builder.joinable() && built.load() >= want) { builder.join(); building = false; }
+        const int nv = std::min(want, built.load(std::memory_order_acquire));
+        if (nv != lastNv) {
+            for (int k = nv; k < lastNv; ++k) { slots[size_t(k)].note = -1; if (slots[size_t(k)].nPend < 32) slots[size_t(k)].pend[slots[size_t(k)].nPend++] = NoteEv{3, 0}; }
+            lastNv = nv;
+            gain = kTrim * (nv > 1 ? 1.f / std::sqrt(std::sqrt(float(nv))) : 1.f);   // nv^-1/4: a lone note stays near full level, a chord still has headroom
+        }
+
+        uint32_t r = nRead.load(std::memory_order_relaxed);
+        const uint32_t nw = nWrite.load(std::memory_order_acquire);
+        auto post = [&](int k, int8_t type, int8_t note) { VSlot& s = slots[size_t(k)]; if (s.nPend < 32) s.pend[s.nPend++] = NoteEv{type, note}; };
+        for (; r != nw; ++r) {
+            const NoteEv e = notes[r & 255];
+            if (nv == 1) { post(0, e.type, e.note); continue; }
+            if (e.type == 1) {
+                int best = -1;
+                for (int k = 0; k < nv; ++k) if (slots[size_t(k)].note == e.note) { best = k; break; }   // the same note again: retrigger its voice
+                for (int k = 0; k < nv && best < 0; ++k) if (slots[size_t(k)].note < 0 && (best < 0 || slots[size_t(k)].age < slots[size_t(best)].age)) best = k;
+                if (best < 0) {   // all in use: steal the oldest
+                    for (int k = 0; k < nv; ++k) if (best < 0 || slots[size_t(k)].age < slots[size_t(best)].age) best = k;
+                    post(best, 2, int8_t(slots[size_t(best)].note));
+                }
+                slots[size_t(best)].note = e.note; slots[size_t(best)].age = ++clock;
+                post(best, 1, e.note);
+            } else if (e.type == 2) {
+                int oldest = -1;
+                for (int k = 0; k < nv; ++k) if (slots[size_t(k)].note == e.note && (oldest < 0 || slots[size_t(k)].age < slots[size_t(oldest)].age)) oldest = k;
+                if (oldest < 0) continue;   // stolen earlier
+                slots[size_t(oldest)].note = -1; slots[size_t(oldest)].age = ++clock;
+                post(oldest, 2, e.note);
+            } else {
+                for (int k = 0; k < nv; ++k) { slots[size_t(k)].note = -1; post(k, 3, 0); }
+            }
+        }
+        if (dbg && r != nRead.load(std::memory_order_relaxed)) afterNote = 40;
+        nRead.store(r, std::memory_order_release);
+
+        // hand each idle worker its notes and start it; voice 0 renders here meanwhile
+        for (int k = 1; k < nv; ++k) {
+            VSlot& s = slots[size_t(k)];
+            if (s.done.load(std::memory_order_acquire) != s.go.load(std::memory_order_relaxed)) continue;   // still on the last block: its notes wait
+            std::memcpy(s.ops, s.pend, sizeof(NoteEv) * size_t(s.nPend)); s.nOps = s.nPend; s.nPend = 0;
+            s.go.store(s.go.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+        }
+        const auto tb = std::chrono::steady_clock::now();
+        {
+            VSlot& s = slots[0];
+            std::memcpy(s.ops, s.pend, sizeof(NoteEv) * size_t(s.nPend)); s.nOps = s.nPend; s.nPend = 0;
+            renderSlot(*this, s);
+        }
+        const auto tv0 = std::chrono::steady_clock::now();
+        std::array<bool, kMaxVoices> got{}; got[0] = true;
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int k = 1; k < nv; ++k) {
+            VSlot& s = slots[size_t(k)];
+            while (s.done.load(std::memory_order_acquire) != s.go.load(std::memory_order_relaxed)
+                   && std::chrono::steady_clock::now() - t0 < std::chrono::microseconds(2200)) {
+                struct timespec ts{0, 10000}; nanosleep(&ts, nullptr);
+            }
+            got[size_t(k)] = s.done.load(std::memory_order_acquire) == s.go.load(std::memory_order_relaxed);   // a late voice is left out of this block
+        }
+
+        if (dbg && nv > 1) {
+            const auto te = std::chrono::steady_clock::now();
+            const double us = std::chrono::duration<double, std::micro>(te - tb).count();
+            sumUs += us; worstUs = std::max(worstUs, us); sumV0 += std::chrono::duration<double, std::micro>(tv0 - tb).count(); ++nBlk;
+            for (int k = 1; k < nv; ++k) if (!got[size_t(k)]) { ++nLate; break; }
+            if (afterNote > 0) { --afterNote; std::fprintf(stderr, "[monomodule] after note: block %.0f us (voice 0 %.0f), ring ahead %d, nv %d\n", us, std::chrono::duration<double, std::micro>(tv0 - tb).count(), int32_t(w - rRead.load()), nv); }
+            if (us > 2000 && nSlow++ < 40) { std::fprintf(stderr, "[monomodule] slow block %ld: %.0f us (voice 0 %.0f) late:", nBlk, us, std::chrono::duration<double, std::micro>(tv0 - tb).count()); for (int k = 1; k < nv; ++k) std::fprintf(stderr, " [v%d late=%d last=%dus cpu=%d]", k, got[size_t(k)] ? 0 : 1, slots[size_t(k)].lastUs.load(), slots[size_t(k)].cpu.load()); std::fprintf(stderr, " main cpu %d\n", sched_getcpu()); }
+            if (nBlk % 300 == 0) std::fprintf(stderr, "[monomodule] poly: %d voices, block mean %.0f us (voice 0 %.0f), worst %.0f, late %ld / %ld\n", nv, sumUs / nBlk, sumV0 / nBlk, worstUs, nLate, nBlk);
+        }
+        if (dbg) { const double t = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tb).count(); if (t > 20) std::fprintf(stderr, "[monomodule] block took %.0f ms (voice 0 %.0f ms)\n", t, std::chrono::duration<double, std::milli>(tv0 - tb).count()); }
+        int16_t* out = ring[w % kRing];
+        for (int i = 0; i < kFrames; ++i) {
+            float l = 0.f, rr = 0.f;
+            for (int k = 0; k < nv; ++k) if (got[size_t(k)]) { l += slots[size_t(k)].L[i]; rr += slots[size_t(k)].R[i]; }
+            out[2 * i] = int16_t(std::lrint(soft(l * gain) * 32767.f));
+            out[2 * i + 1] = int16_t(std::lrint(soft(rr * gain) * 32767.f));
+        }
+        bool allParked = true;
+        for (int k = 0; k < nv; ++k) allParked = allParked && slots[size_t(k)].parked;
+        parked.store(allParked);
+        rWrite.store(w + 1, std::memory_order_release);
+        blocks.fetch_add(1, std::memory_order_relaxed);
+        for (int k = 0; k < nv; ++k) if (slots[size_t(k)].v->engine().faulted()) { std::fprintf(stderr, "[monomodule] DSP fault: %s\n", slots[size_t(k)].v->engine().faultReason().c_str()); return; }
+    }
+    if (builder.joinable()) builder.join();
+    for (int k = 1; k < kMaxVoices; ++k) if (slots[size_t(k)].th.joinable()) slots[size_t(k)].th.join();
 }
 
 void Inst::run()
@@ -559,6 +814,10 @@ void Inst::run()
     }
 #endif
     ready.store(true);
+#if !MNM_FX
+    runVoices(*voice, *firmware, prio);
+    return;
+#endif
 
     while (!stop.load(std::memory_order_acquire)) {
         const uint32_t w = rWrite.load(std::memory_order_relaxed);
@@ -805,7 +1064,7 @@ void eSet(void* p, const char* key, const char* val)
         in->markLoaded();
         return;
     }
-    in->param[s].store(s == kSlotTune ? std::clamp(v, 400, 440) : s == kSlotLpk || s == kSlotHpk ? (v ? 1 : 0) : std::clamp(v, 0, 127));
+    in->param[s].store(s == kSlotTune ? std::clamp(v, 400, 440) : s == kSlotVoices ? std::clamp(v, 1, kMaxVoices) : s == kSlotLpk || s == kSlotHpk ? (v ? 1 : 0) : std::clamp(v, 0, 127));
 }
 int eGet(void* p, const char* key, char* buf, int len)
 {

@@ -7,6 +7,8 @@
 #include <thread>
 #include <dirent.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <sched.h>
 extern "C" {
 #include "engine.h"
 }
@@ -20,10 +22,10 @@ static double dspCpuSeconds()
             char p[128], name[64] = "", line[512];
             snprintf(p, sizeof p, "/proc/self/task/%s/comm", e->d_name);
             if (FILE* f = fopen(p, "r")) { if (fgets(name, sizeof name, f)) name[strcspn(name, "\n")] = 0; fclose(f); }
-            if (strcmp(name, "mnm-dsp")) continue;
+            if (strcmp(name, "mnm-dsp") && strcmp(name, "mnm-voice")) continue;
             snprintf(p, sizeof p, "/proc/self/task/%s/stat", e->d_name);
             if (FILE* f = fopen(p, "r")) {
-                if (fgets(line, sizeof line, f)) { unsigned long u = 0, s = 0; const char* q = strrchr(line, ')'); sscanf(q + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &u, &s); best = double(u + s) / double(sysconf(_SC_CLK_TCK)); }
+                if (fgets(line, sizeof line, f)) { unsigned long u = 0, s = 0; const char* q = strrchr(line, ')'); sscanf(q + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &u, &s); best += double(u + s) / double(sysconf(_SC_CLK_TCK)); }
                 fclose(f);
             }
         }
@@ -33,6 +35,7 @@ static double dspCpuSeconds()
 }
 int main(int argc, char** argv)
 {
+    if (getenv("SMOKE_RR")) { sched_param sp{}; sp.sched_priority = atoi(getenv("SMOKE_RR")); if (pthread_setschedparam(pthread_self(), SCHED_RR, &sp)) puts("could not set SCHED_RR"); }   // the host's audio thread (MPC: RR 20)
     const mpc_engine_t* e = mpc_engine();
     const auto t0 = Clock::now();
     void* in = e->create(argc > 1 ? argv[1] : ".");
@@ -53,13 +56,19 @@ int main(int argc, char** argv)
     }
     e->get_param(in, "core", buf, sizeof buf); printf("core %s\n", buf);
     const bool fx = e->process != nullptr;   // an effect: feed noise for the first three quarters, then silence (tail)
-    if (!fx) e->midi(in, on, 3);
+    // SMOKE_VOICES=n: POLY with n voices, and a chord of n notes (SMOKE_ONE=1: one note); the voices take a moment to build
+    const int nv = getenv("SMOKE_VOICES") ? atoi(getenv("SMOKE_VOICES")) : 1;
+    uint8_t chord[6][3], chordOff[6][3];
+    for (int k = 0; k < 6; ++k) { chord[k][0] = 0x90; chord[k][1] = uint8_t(45 + 4 * k); chord[k][2] = 100; chordOff[k][0] = 0x80; chordOff[k][1] = chord[k][1]; chordOff[k][2] = 0; }
+    if (nv > 1) { char v[8]; snprintf(v, sizeof v, "%d", nv); e->set_param(in, "voices", v); std::this_thread::sleep_for(std::chrono::seconds(getenv("SMOKE_WAIT") ? atoi(getenv("SMOKE_WAIT")) : 3 + nv)); }
+    if (!fx) { if (nv > 1 && !getenv("SMOKE_ONE")) for (int k = 0; k < nv; ++k) e->midi(in, chord[k], 3); else e->midi(in, on, 3); }
     const double cpu0 = dspCpuSeconds(); const auto t1 = Clock::now();
     auto next = t1;
     const int blocks = secs * 44100 / 128;
     for (int b = 0; b < blocks; ++b) {
         next += std::chrono::nanoseconds(int64_t(128.0 / 44100.0 * 1e9));
         std::this_thread::sleep_until(next);
+        { const double late = std::chrono::duration<double, std::milli>(Clock::now() - next).count(); if (late > 20) printf("consumer woke %.0f ms late at block %d\n", late, b); }
         if (fx) {
             static int16_t src[128 * 2];
             for (int i = 0; i < 256; ++i) src[i] = b < blocks * 3 / 4 ? int16_t((rand() % 16000) - 8000) : 0;
@@ -67,8 +76,9 @@ int main(int argc, char** argv)
         } else {
             e->render(in, out, 128);
         }
+        if (getenv("SMOKE_URUN")) { char ub[16]; e->get_param(in, "underruns", ub, sizeof ub); static int last = 0; const int u = atoi(ub); if (u != last) { static int shown = 0; if (shown++ < 6 || u - last > 1) printf("underrun at block %d (total %d)\n", b, u); last = u; } }
         for (int i = 0; i < 256; ++i) { int v = out[i] < 0 ? -out[i] : out[i]; if (v > peak) peak = v; }
-        if (!fx && b == blocks * 3 / 4) e->midi(in, off, 3);
+        if (!fx && b == blocks * 3 / 4) { if (nv > 1 && !getenv("SMOKE_ONE")) for (int k = 0; k < nv; ++k) e->midi(in, chordOff[k], 3); else e->midi(in, off, 3); }
     }
     const double wall = std::chrono::duration<double>(Clock::now() - t1).count();
     e->get_param(in, "underruns", buf, sizeof buf);

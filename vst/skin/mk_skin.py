@@ -734,11 +734,14 @@ def extra_p(label, display, default, count=128, icons=0, values=None, fmt=None):
 
 
 # the extra global controls (not in upstream's One editor): master tune in Hz (the emulator supports 400..440), LPF/HPF key tracking
-GLOBAL_CELLS = [blank_p()] + ([blank_p() for _ in range(7)] if FXV else [
+# The instrument's GLOBAL page: LEV is a knob like the rest (it freed a cell for VOICES, the POLY voice count; 1 = the classic monophonic voice).
+# The FX keeps upstream's tall LEV column.
+GLOBAL_CELLS = [blank_p()] + [blank_p() for _ in range(7)] if FXV else [
+    extra_p("LEV", 1, 100, fmt=lambda raw: str(raw)),
     extra_p("TUNE", 1, 127, fmt=lambda raw: str(int(round(400 + raw * 40 / 127.0)))),
     extra_p("LPF KEY", 3, 127, 2, 1, ["OFF", "ON"]), extra_p("HPF KEY", 3, 127, 2, 1, ["OFF", "ON"]),
-    blank_p(),   # index4: obscured by the LEV column, which spans both grid rows
-    extra_p("RND SYN", 3, 0, 2, 1, ["OFF", "ON"]), extra_p("RND A/F", 3, 0, 2, 1, ["OFF", "ON"]), extra_p("RND LFO", 3, 0, 2, 1, ["OFF", "ON"])])
+    extra_p("VOICES", 1, 0, fmt=lambda raw: str(1 + int(round(raw * 5 / 127.0)))),
+    extra_p("RND SYN", 3, 0, 2, 1, ["OFF", "ON"]), extra_p("RND A/F", 3, 0, 2, 1, ["OFF", "ON"]), extra_p("RND LFO", 3, 0, 2, 1, ["OFF", "ON"])]
 if LEVQ:
     PAGE_CELLS["GLOBAL"] = GLOBAL_CELLS
 for name, cells in PAGE_CELLS.items():
@@ -935,9 +938,10 @@ if TABS:
 
 
 if LEVQ:
-    # GLOBAL quadrant: LEV as upstream's column (label, dotted frame, solid bar) filling the first cell column, then the extra globals
     qx, qy = page_origin("GLOBAL")
     body_y = GRID_Y                                            # the cell grid's first row inside the page
+if LEVQ and FXV:
+    # GLOBAL quadrant: LEV as upstream's column (label, dotted frame, solid bar) filling the first cell column
     col_rows = 2 * CELL
     lv = Canvas(CW, col_rows)
     lv.dots_h(0, CW - 1, 0); lv.dots_v(0, 0, col_rows - 1)     # the column's own top/left borders (the page's bottom edge is drawn by the page)
@@ -974,9 +978,10 @@ if LEVQ:
     fn_t = save_png("touch_lev", Image.new("RGBA", (8, 8 * FRAMES), (0, 0, 0, 0)))
     place(knob_def(fn_t, lev_tw, lev_th), "LEV touch", PIDX["level"], qx + TOUCH_INSET * S, qy + (body_y + TOUCH_INSET) * S, lev_tw, lev_th,
           focus="No", tab=TAB_OF["GLOBAL"])
-    # master tune: a dial cell (its value row shows Hz); LPF/HPF key tracking: two-state buttons drawn as the LCD's toggle cells
+if LEVQ:
+    # LEV, master tune (value row in Hz) and VOICES are dial cells; LPF/HPF key tracking and the randomisers: two-state buttons drawn as the LCD's toggle cells
     if not FXV:
-        cell_knobs("GLOBAL", GLOBAL_CELLS, ["level", "master_tune", "lpf_key", "hpf_key", "level", "level", "level", "level"])
+        cell_knobs("GLOBAL", GLOBAL_CELLS, ["level", "master_tune", "lpf_key", "hpf_key", "voices", "level", "level", "level"])
     for k_, key_p in (() if FXV else ((2, "lpf_key"), (3, "hpf_key"), (5, "randomize_syn"), (6, "randomize_ampfilt"), (7, "randomize_lfo"))):
         p_ = GLOBAL_CELLS[k_]
         imgs = {}
@@ -1217,7 +1222,7 @@ if TABS:
         ("SYN / AMP", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)])]),
         ("FILT / EFX", [("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
-                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"] + ([] if FXV else ["master_tune", "lpf_key", "hpf_key"]))]),
+                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + (["level", "machine"] if FXV else ["level", "master_tune", "lpf_key", "hpf_key", "voices"]))]),
     ]
 elif GRID:
     TAB_SETS = [
@@ -1231,7 +1236,7 @@ else:
         ("SYN / AMP / FILT / EFX", [("SYN / AMP", ["syn%d" % k for k in range(8)] + ["amp%d" % k for k in range(8)]),
                                     ("FILT / EFX", ["filt%d" % k for k in range(8)] + ["efx%d" % k for k in range(8)])]),
         ("LFO", [("LFO1 / LFO2", ["lfo1_%d" % k for k in range(8)] + ["lfo2_%d" % k for k in range(8)]),
-                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + ["level", "machine"] + ([] if FXV else ["master_tune", "lpf_key", "hpf_key"]))]),
+                 ("LFO3 / GLOBAL", ["lfo3_%d" % k for k in range(8)] + (["level", "machine"] if FXV else ["level", "master_tune", "lpf_key", "hpf_key", "voices"]))]),
     ]
 
 
@@ -1241,7 +1246,11 @@ def qlink_boxes(keys):
     def cell(key):
         m = re.match(r"(syn|amp|filt|efx|lfo(\d))_?(\d)$", key)
         if not m:
-            return None
+            g = {"level": 0, "master_tune": 1, "lpf_key": 2, "hpf_key": 3, "voices": 4}.get(key)
+            if g is None or FXV or "GLOBAL" not in PAGE_POS:
+                return None
+            x0, y0 = page_origin("GLOBAL")
+            return x0 + (g % 4) * CW * S, y0 + (GRID_Y + (g // 4) * CELL) * S, CW * S, CELL * S
         page = {"syn": "SYN", "amp": "AMP", "filt": "FILT", "efx": "EFX"}.get(m.group(1)) or "LFO%s" % m.group(2)
         if page not in PAGE_POS:
             return None

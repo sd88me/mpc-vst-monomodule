@@ -1198,6 +1198,14 @@
    "min": 0,
    "max": 0,
    "display": "string"
+  },
+  {
+   "key": "voices",
+   "name": "Voices",
+   "min": 1,
+   "max": 6,
+   "default": 1,
+   "display": "int"
   }
  ],
  "sections": [
