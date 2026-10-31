@@ -76,11 +76,11 @@ python3 "$MV/tools/gen_vst.py" vst/vst.json >/dev/null; python3 "$MV/tools/gen_v
 REQ="Your own Monomachine OS 1.32B file (a free download from Elektron), put in the plugin's monomodule/ folder; MPC restarted once after the first load (the plugin makes its skin from that file). Gen2 MPCs (aarch64) only"
 python3 "$MV/tools/release.py" --so vst/build/aarch64/monomodule_one.so --skin "$WORK/skin/recipe/files/one/$ONE" --entry vst/build/pluginlist-entry.xml \
   --version "$VERSION" --extra "$PAY/monomodule:monomodule" --extra "$PAY/skin-recipe:skin-recipe" --user-data monomodule \
-  --id monomodule-one-gen2 --repo sd88me/mpc-vst-monomodule --license AGPL-3.0-or-later --requires "$REQ" \
+  --folder-name "Monomodule One" --id monomodule-one-gen2 --repo sd88me/mpc-vst-monomodule --license AGPL-3.0-or-later --requires "$REQ" \
   --about "Monomodule One: the Monomachine's synth engine as an MPC OS instrument (Gen2; runs your own OS file)" -o dist
 python3 "$MV/tools/release.py" --so vst/fx/build/aarch64/monomodule_fx.so --skin "$WORK/skin/recipe/files/fx/$FX" --entry vst/fx/build/pluginlist-entry.xml \
   --version "$VERSION" --extra "$PAY/monomodule:monomodule" --extra "$PAY/skin-recipe:skin-recipe" --user-data monomodule \
-  --id monomodule-fx-gen2 --repo sd88me/mpc-vst-monomodule --license AGPL-3.0-or-later --requires "$REQ" \
+  --folder-name "Monomodule FX" --id monomodule-fx-gen2 --repo sd88me/mpc-vst-monomodule --license AGPL-3.0-or-later --requires "$REQ" \
   --about "Monomodule FX: the Monomachine's effect machines as an MPC OS audio effect (Gen2; runs your own OS file)" -o dist
 for z in dist/Monomodule-One-"$VERSION"-mpc-aarch64.zip dist/Monomodule-FX-"$VERSION"-mpc-aarch64.zip; do
   ls -l "$z"
