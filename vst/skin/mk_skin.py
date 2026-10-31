@@ -1246,7 +1246,11 @@ def qlink_boxes(keys):
     def cell(key):
         m = re.match(r"(syn|amp|filt|efx|lfo(\d))_?(\d)$", key)
         if not m:
-            return None
+            g = {"level": 0, "master_tune": 1, "lpf_key": 2, "hpf_key": 3, "voices": 4}.get(key)
+            if g is None or FXV or "GLOBAL" not in PAGE_POS:
+                return None
+            x0, y0 = page_origin("GLOBAL")
+            return x0 + (g % 4) * CW * S, y0 + (GRID_Y + (g // 4) * CELL) * S, CW * S, CELL * S
         page = {"syn": "SYN", "amp": "AMP", "filt": "FILT", "efx": "EFX"}.get(m.group(1)) or "LFO%s" % m.group(2)
         if page not in PAGE_POS:
             return None

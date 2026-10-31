@@ -659,7 +659,10 @@ void Inst::runVoices(MonoVoice& v0, const fw::Firmware& firmware, int prio)
     const bool dbg = std::getenv("MNM_DEBUG") != nullptr;
     int afterNote = 0;
     auto lastIter = std::chrono::steady_clock::now();
-    float gain = 1.f;
+    // +6 dB output trim (the engine's level sits well below other MPC plugins); peaks above 0.75 are soft-limited, not hard-clipped
+    constexpr float kTrim = 2.f;
+    float gain = kTrim;
+    auto soft = [](float x) { const float a = std::fabs(x); return a <= 0.75f ? x : std::copysign(0.75f + 0.25f * std::tanh((a - 0.75f) * 4.f), x); };
     while (!stop.load(std::memory_order_acquire)) {
         const uint32_t w = rWrite.load(std::memory_order_relaxed);
         if (dbg) { const auto n0 = std::chrono::steady_clock::now(); const double g = std::chrono::duration<double, std::milli>(n0 - lastIter).count(); if (g > 20) std::fprintf(stderr, "[monomodule] loop gap %.0f ms, ring ahead %d, cpu %d\n", g, int32_t(w - rRead.load()), sched_getcpu()); lastIter = n0; }
@@ -677,7 +680,7 @@ void Inst::runVoices(MonoVoice& v0, const fw::Firmware& firmware, int prio)
         if (nv != lastNv) {
             for (int k = nv; k < lastNv; ++k) { slots[size_t(k)].note = -1; if (slots[size_t(k)].nPend < 32) slots[size_t(k)].pend[slots[size_t(k)].nPend++] = NoteEv{3, 0}; }
             lastNv = nv;
-            gain = nv > 1 ? 1.f / std::sqrt(float(nv)) : 1.f;
+            gain = kTrim * (nv > 1 ? 1.f / std::sqrt(std::sqrt(float(nv))) : 1.f);   // nv^-1/4: a lone note stays near full level, a chord still has headroom
         }
 
         uint32_t r = nRead.load(std::memory_order_relaxed);
@@ -748,8 +751,8 @@ void Inst::runVoices(MonoVoice& v0, const fw::Firmware& firmware, int prio)
         for (int i = 0; i < kFrames; ++i) {
             float l = 0.f, rr = 0.f;
             for (int k = 0; k < nv; ++k) if (got[size_t(k)]) { l += slots[size_t(k)].L[i]; rr += slots[size_t(k)].R[i]; }
-            out[2 * i] = int16_t(std::lrint(std::clamp(l * gain, -1.f, 1.f) * 32767.f));
-            out[2 * i + 1] = int16_t(std::lrint(std::clamp(rr * gain, -1.f, 1.f) * 32767.f));
+            out[2 * i] = int16_t(std::lrint(soft(l * gain) * 32767.f));
+            out[2 * i + 1] = int16_t(std::lrint(soft(rr * gain) * 32767.f));
         }
         bool allParked = true;
         for (int k = 0; k < nv; ++k) allParked = allParked && slots[size_t(k)].parked;
