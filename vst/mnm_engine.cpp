@@ -10,6 +10,7 @@
 // Parameters are raw 0..127 kit bytes, held in atomics; the DSP thread diffs them against what it applied.
 // Keys: machine (option index), level, syn0-7 (A-H, meaning follows the machine), amp0-7, filt0-7, efx0-7,
 // lfo1_0-7, lfo2_0-7, lfo3_0-7.
+#include "fast_cores.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -142,7 +143,12 @@ int chooseCore()
     sample(b1, t1, n);
     int best = -1; double bestLoad = 2;
     const unsigned used = g_usedCores.load();
+    // Gen2 big.LITTLE (Live III: A55 0-3, A76 4-7): only the fast cores minus MPC's Audio Processing core. "Least busy" alone
+    // chose the A55s (MPC keeps the fast ones busy), where the DSP costs ~4x more (measured 2026-11-03, mpc-vst-plugins
+    // docs/EMULATOR_PORTS.md: 31% -> 8% of a core at 8 voices). Same-speed CPUs (Force): every core but 0, as before.
+    const auto fast = fastcores::usable();
     for (int c = 1; c < n; ++c) {
+        if (!fast.empty() && std::find(fast.begin(), fast.end(), c) == fast.end()) continue;
         const double dt = double(t1[c] - t0[c]);
         double load = dt > 0 ? double(b1[c] - b0[c]) / dt : 0;
         if (used & (1u << c)) load += 1.0;   // another instance already runs there: last resort
@@ -547,6 +553,12 @@ struct VSlot {
 void freeAffinity(int exceptCore)
 {
     cpu_set_t cs; CPU_ZERO(&cs);
+    const auto fast = fastcores::usable();   // Gen2 big.LITTLE: the voices stay on the fast cores too
+    if (!fast.empty()) {
+        for (int c : fast) if (c != exceptCore || fast.size() == 1) CPU_SET(c, &cs);
+        sched_setaffinity(0, sizeof cs, &cs);
+        return;
+    }
     const int ncpu = int(sysconf(_SC_NPROCESSORS_ONLN));
     for (int c = ncpu > 1 ? 1 : 0; c < ncpu; ++c) if (c != exceptCore || ncpu <= 2) CPU_SET(c, &cs);
     sched_setaffinity(0, sizeof cs, &cs);
@@ -793,6 +805,9 @@ void Inst::run()
     // realtime only once booted, above MPC's AudioWorkers (SCHED_RR 20); MNM_FIFO=0 keeps SCHED_OTHER
     int prio = 30;
     if (const char* e = std::getenv("MNM_FIFO")) prio = std::atoi(e);
+    // Gen2: on the fast cores MPC's own audio threads (SCHED_RR 20) live, one per core; above them this thread would take a
+    // core from MPC's audio engine (Machinemodule saw the whole Force glitch that way). Capped at 15 there; Force unchanged.
+    if (prio > 0) prio = fastcores::rt_priority(prio);
     if (prio > 0) { sched_param sp{}; sp.sched_priority = prio; pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp); }
     core = std::getenv("MNM_CPU") ? std::atoi(std::getenv("MNM_CPU")) : chooseCore();
     if (core >= 0) { cpu_set_t s; CPU_ZERO(&s); CPU_SET(core, &s); sched_setaffinity(0, sizeof s, &s); }
