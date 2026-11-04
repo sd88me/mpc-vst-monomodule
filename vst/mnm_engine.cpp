@@ -294,6 +294,12 @@ struct Inst {
     // MPC probes the machine parameter (set another value, then straight back to the original) around the autosampler and
     // similar; a machine change resets the pages, so a quick A -> B -> A would wipe the patch. Remember the sound that was
     // replaced and put it back if its machine returns right away.
+    // MPC's plugin host sets parameter 0 (Machine) to its maximum and straight back on every Stop. The DSP thread would swap
+    // the voice's machine twice if it saw the maximum in between (cutting a held note): a held jump to the last machine is
+    // only applied if nothing sets the parameter again within kHoldMs (applied from eRender).
+    static constexpr int kHoldMs = 150;
+    bool heldMachine = false;
+    std::chrono::steady_clock::time_point heldAt;
     struct Stash { int machine = -1; int param[kSlotTab]; int snapv[kSlotTab]; int presetIdx = 0; std::chrono::steady_clock::time_point t; } stash;
     void stashSound()
     {
@@ -301,6 +307,19 @@ struct Inst {
         for (int i = 1; i < kSlotTab; ++i) { stash.param[i] = param[i].load(); stash.snapv[i] = snap[i]; }
         stash.presetIdx = presetIdx;
         stash.t = std::chrono::steady_clock::now();
+    }
+    void setMachineNow(int m)
+    {
+        if (m == param[kSlotMachine].load()) return;
+        if (unstashSound(m)) return;
+        stashSound();
+        int d[32];
+        defaultsFor(m, d);
+        for (int i = 0; i < 32; ++i) param[kSlotPages + i].store(d[i]);
+        param[kSlotMachine].store(m);
+        presetIdx = 0;   // a new machine starts from its Init
+        pageSeen = -1;
+        markLoaded();
     }
     bool unstashSound(int machine)
     {
@@ -1067,16 +1086,9 @@ void eSet(void* p, const char* key, const char* val)
     if (in->trace) { std::fprintf(in->trace, "set %s '%s' -> %d\n", key, val, v); std::fflush(in->trace); }
     if (s == kSlotMachine) {
         const int m = std::clamp(v, 0, kNumMachines - 1);
-        if (m == in->param[kSlotMachine].load()) return;
-        if (in->unstashSound(m)) return;
-        in->stashSound();
-        int d[32];
-        defaultsFor(m, d);
-        for (int i = 0; i < 32; ++i) in->param[kSlotPages + i].store(d[i]);
-        in->param[kSlotMachine].store(m);
-        in->presetIdx = 0;   // a new machine starts from its Init
-        in->pageSeen = -1;
-        in->markLoaded();
+        if (m == kNumMachines - 1 && m != in->param[kSlotMachine].load()) { in->heldMachine = true; in->heldAt = std::chrono::steady_clock::now(); return; }
+        in->heldMachine = false;
+        in->setMachineNow(m);
         return;
     }
     in->param[s].store(s == kSlotTune ? std::clamp(v, 400, 440) : s == kSlotVoices ? std::clamp(v, 1, kMaxVoices) : s == kSlotLpk || s == kSlotHpk ? (v ? 1 : 0) : std::clamp(v, 0, 127));
@@ -1130,6 +1142,10 @@ int eGet(void* p, const char* key, char* buf, int len)
 void eRender(void* p, int16_t* out, int frames)
 {
     auto* in = static_cast<Inst*>(p);
+    if (in->heldMachine && std::chrono::steady_clock::now() - in->heldAt > std::chrono::milliseconds(Inst::kHoldMs)) {
+        in->heldMachine = false;
+        in->setMachineNow(kNumMachines - 1);
+    }
     int done = 0;
     while (done < frames) {
         const int n = std::min(frames - done, kFrames);
